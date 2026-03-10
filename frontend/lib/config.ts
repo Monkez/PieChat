@@ -48,8 +48,8 @@ function resolveMatrixBaseUrl(): string {
     }
     // 3. Same-host inference (web only)
     if (typeof window !== 'undefined') {
-        // In production (HTTPS via Nginx proxy), API is on same origin
-        if (window.location.protocol === 'https:') {
+        // When served via Nginx proxy (not localhost dev), use same origin
+        if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
             return `${window.location.protocol}//${window.location.host}`;
         }
         return `http://${window.location.hostname}:8008`;
@@ -68,8 +68,8 @@ function resolveAuthBaseUrl(): string {
     }
     // 3. Same-host inference (web only)
     if (typeof window !== 'undefined') {
-        // In production (HTTPS via Nginx proxy), auth is on same origin
-        if (window.location.protocol === 'https:') {
+        // When served via Nginx proxy (not localhost dev), use same origin
+        if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
             return `${window.location.protocol}//${window.location.host}`;
         }
         return `http://${window.location.hostname}:4000`;
