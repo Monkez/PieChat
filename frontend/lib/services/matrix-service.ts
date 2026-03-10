@@ -1333,8 +1333,16 @@ class MatrixService {
 
       // Group call events by callId
       const callMap: Record<string, { invite?: any, answer?: any, hangup?: any }> = {};
+      const rawCallEvents: typeof this._lastCallEvents = [];
       chunk.forEach(e => {
-        if (['m.call.invite', 'm.call.answer', 'm.call.hangup'].includes(e.type)) {
+        if (['m.call.invite', 'm.call.answer', 'm.call.hangup', 'm.call.candidates'].includes(e.type)) {
+          rawCallEvents.push({
+            type: e.type,
+            content: e.content,
+            sender: e.sender,
+            event_id: e.event_id,
+            origin_server_ts: e.origin_server_ts,
+          });
           const callId = e.content.call_id as string;
           if (callId) {
             if (!callMap[callId]) callMap[callId] = {};
@@ -1344,6 +1352,7 @@ class MatrixService {
           }
         }
       });
+      this._lastCallEvents = rawCallEvents;
 
       const messages = chunk
         .filter((event) => {
@@ -1518,6 +1527,12 @@ class MatrixService {
   private _lastPollVotes: Record<string, Array<{ optionId: string; userId: string }>> = {};
   getLastPollVotes(): Record<string, Array<{ optionId: string; userId: string }>> {
     return this._lastPollVotes;
+  }
+
+  /** Returns raw call events from the last getMessages() call */
+  private _lastCallEvents: Array<{ type: string; content: any; sender: string; event_id: string; origin_server_ts: number }> = [];
+  getLastCallEvents() {
+    return this._lastCallEvents;
   }
 
   async sendReaction(roomId: string, eventId: string, key: string): Promise<void> {

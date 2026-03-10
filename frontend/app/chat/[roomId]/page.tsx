@@ -196,6 +196,30 @@ export default function RoomPage() {
           },
           () => room?.name || 'PieChat',
         );
+
+        // Detect incoming calls
+        const callEvents = matrixService.getLastCallEvents();
+        const callStore = (await import('@/lib/store/call-store')).useCallStore.getState();
+        if (callStore.status === 'none') {
+          // Find an unanswered invite from someone else
+          const invites = callEvents.filter(e => e.type === 'm.call.invite' && e.sender !== currentUser.id);
+          const hangups = callEvents.filter(e => e.type === 'm.call.hangup');
+          const answers = callEvents.filter(e => e.type === 'm.call.answer');
+          for (const invite of invites) {
+            const cid = invite.content.call_id as string;
+            const hasHangup = hangups.some(h => h.content.call_id === cid);
+            const hasAnswer = answers.some(a => a.content.call_id === cid);
+            const isRecent = Date.now() - invite.origin_server_ts < 30000; // 30s lifetime
+            if (!hasHangup && !hasAnswer && isRecent) {
+              const callerMember = room?.members.find(m => m.id === invite.sender);
+              if (callerMember) {
+                const isVideo = (invite.content.offer as any)?.sdp?.includes('m=video');
+                callStore.receiveCall(roomId, callerMember, isVideo ? 'video' : 'voice', cid, invite.content);
+              }
+              break;
+            }
+          }
+        }
       }
     } catch {
       setMessages((prev) => prev);
