@@ -274,18 +274,18 @@ export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoic
       )}
 
       {/* Main Input */}
-      <div className="relative flex items-end gap-1.5 rounded-3xl border border-zinc-200 bg-white p-1.5 lg:p-2 shadow-sm transition-all focus-within:border-sky-500 focus-within:ring-4 focus-within:ring-sky-500/10 dark:border-zinc-800 dark:bg-zinc-900 dark:focus-within:border-sky-500/50">
+      <div className="relative flex items-end gap-1 rounded-2xl border border-zinc-200 bg-white p-1 lg:p-1.5 shadow-sm transition-all focus-within:border-sky-500 focus-within:ring-4 focus-within:ring-sky-500/10 dark:border-zinc-800 dark:bg-zinc-900 dark:focus-within:border-sky-500/50">
         {/* Attach Button */}
         <div className="relative" ref={attachMenuRef}>
           <button
             type="button"
             onClick={() => setIsAttachMenuOpen(!isAttachMenuOpen)}
             className={cn(
-              "flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300",
+              "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300",
               isAttachMenuOpen && "bg-sky-50 text-sky-500 dark:bg-sky-900/20 dark:text-sky-400"
             )}
           >
-            <Paperclip className="h-5 w-5" />
+            <Paperclip className="h-4 w-4" />
           </button>
 
           {isAttachMenuOpen && (
@@ -357,7 +357,7 @@ export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoic
           placeholder={placeholder || "Nhập tin nhắn..."}
           rows={1}
           disabled={disabled}
-          className="max-h-[120px] min-h-[32px] lg:min-h-[36px] flex-1 resize-none bg-transparent py-1.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none dark:text-zinc-100 scrollbar-hide"
+          className="max-h-[120px] min-h-[28px] lg:min-h-[32px] flex-1 resize-none bg-transparent py-1 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none dark:text-zinc-100 scrollbar-hide"
         />
 
         <div className="flex shrink-0 items-center gap-0.5 self-end">
@@ -366,14 +366,14 @@ export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoic
               type="button"
               onClick={() => setIsStickerOpen(!isStickerOpen)}
               className={cn(
-                "flex h-10 w-10 lg:h-8 lg:w-8 items-center justify-center rounded-full transition-colors",
+                "flex h-8 w-8 lg:h-7 lg:w-7 items-center justify-center rounded-full transition-colors",
                 isStickerOpen
                   ? "bg-sky-50 text-sky-500 dark:bg-sky-900/20 dark:text-sky-400"
                   : "text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
               )}
               title="Sticker"
             >
-              <Smile className="h-7 w-7 lg:h-5 lg:w-5" />
+              <Smile className="h-5 w-5 lg:h-4 lg:w-4" />
             </button>
             <StickerPicker
               isOpen={isStickerOpen}
@@ -390,14 +390,14 @@ export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoic
               onClick={() => handleSubmit()}
               disabled={disabled || isUploading}
               className={cn(
-                "flex h-10 w-10 lg:h-8 lg:w-8 items-center justify-center rounded-full transition-all",
+                "flex h-8 w-8 lg:h-7 lg:w-7 items-center justify-center rounded-full transition-all",
                 "bg-sky-600 text-white shadow-md hover:bg-sky-700 hover:scale-105 active:scale-95"
               )}
             >
               {isUploading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (
-                <Send className="h-5 w-5 lg:h-4 lg:w-4" />
+                <Send className="h-4 w-4 lg:h-3.5 lg:w-3.5" />
               )}
             </button>
           ) : (
@@ -405,14 +405,14 @@ export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoic
               onClick={startRecording}
               disabled={disabled}
               className={cn(
-                "flex h-10 w-10 lg:h-8 lg:w-8 items-center justify-center rounded-full transition-all",
+                "flex h-8 w-8 lg:h-7 lg:w-7 items-center justify-center rounded-full transition-all",
                 disabled
                   ? "bg-zinc-100 text-zinc-300 dark:bg-zinc-800 dark:text-zinc-600 cursor-not-allowed"
                   : "bg-sky-600 text-white shadow-md hover:bg-sky-700 hover:scale-105 active:scale-95"
               )}
               title="Ghi âm tin nhắn thoại"
             >
-              <Mic className="h-5 w-5 lg:h-4 lg:w-4" />
+              <Mic className="h-4 w-4 lg:h-3.5 lg:w-3.5" />
             </button>
           )}
         </div>
