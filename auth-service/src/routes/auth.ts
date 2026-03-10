@@ -287,7 +287,7 @@ router.post('/qr/generate', (_req: Request, res: Response) => {
 
 // Poll QR session status — Web polls this every 2s
 router.get('/qr/status/:sessionId', (req: Request, res: Response) => {
-    const { sessionId } = req.params;
+    const sessionId = String(req.params.sessionId);
     const session = qrSessions.get(sessionId);
     if (!session) {
         res.status(404).json({ status: 'expired' });
