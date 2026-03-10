@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useCallback } from 'react';
+import type { Message } from '@/lib/services/matrix-service';
 
 interface NotificationItem {
   id: string;
@@ -11,6 +12,10 @@ interface NotificationItem {
   roomId: string;
 }
 
+// Track which message IDs we've already notified
+let _notifiedMessageIds = new Set<string>();
+const MAX_NOTIFIED = 500;
+
 // Request notification permission
 export function requestNotificationPermission() {
   if (typeof window === 'undefined') return;
@@ -20,32 +25,75 @@ export function requestNotificationPermission() {
   }
 }
 
-// Show a browser notification
-function showNotification(title: string, body: string, icon?: string) {
+// Show a browser notification (via SW if available)
+async function showNotification(title: string, body: string, options?: {
+  icon?: string;
+  tag?: string;
+  data?: Record<string, unknown>;
+  silent?: boolean;
+}) {
   if (typeof window === 'undefined') return;
   if (!('Notification' in window)) return;
+  if (Notification.permission !== 'granted') return;
 
-  if (Notification.permission === 'granted') {
-    const n = new Notification(title, {
-      body,
-      icon: icon || '/icon.svg',
-      badge: '/icon.svg',
-      tag: `piechat-${Date.now()}`,
-      requireInteraction: false,
-    });
-    // Auto-close after 8s
-    setTimeout(() => n.close(), 8000);
+  try {
+    // Try service worker notification first
+    const sw = await navigator.serviceWorker?.ready;
+    if (sw) {
+      await sw.showNotification(title, {
+        body,
+        icon: options?.icon || '/PieChatIcon.png',
+        badge: '/PieChatIcon.png',
+        tag: options?.tag || `piechat-${Date.now()}`,
+        data: options?.data,
+        silent: options?.silent,
+        requireInteraction: false,
+      });
+    } else {
+      const n = new Notification(title, {
+        body,
+        icon: options?.icon || '/PieChatIcon.png',
+        tag: options?.tag || `piechat-${Date.now()}`,
+        silent: options?.silent,
+      });
+      setTimeout(() => n.close(), 8000);
+    }
+  } catch {
+    // Fallback
+    try {
+      const n = new Notification(title, {
+        body,
+        icon: options?.icon || '/PieChatIcon.png',
+        tag: options?.tag || `piechat-${Date.now()}`,
+        silent: options?.silent,
+      });
+      setTimeout(() => n.close(), 8000);
+    } catch { /* ignore */ }
   }
 }
 
-// Play a notification sound
+// Play a synthesized notification chime (no file needed)
 function playNotificationSound() {
   try {
-    const audio = new Audio('/notification.mp3');
-    audio.volume = 0.5;
-    audio.play().catch(() => {});
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const playTone = (freq: number, startTime: number, duration: number) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.15, startTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(startTime);
+      osc.stop(startTime + duration);
+    };
+    const now = ctx.currentTime;
+    playTone(880, now, 0.15);        // A5
+    playTone(1174.66, now + 0.12, 0.2); // D6
+    setTimeout(() => ctx.close(), 500);
   } catch {
-    // Ignore audio errors
+    // Audio not available
   }
 }
 
@@ -217,4 +265,121 @@ export function useChatNotifications() {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, [checkNotifications]);
+}
+
+// ─── New Message Notifications ──────────────────────────
+
+function isDocumentVisible(): boolean {
+  if (typeof document === 'undefined') return true;
+  return document.visibilityState === 'visible' && document.hasFocus();
+}
+
+function getMessageBody(msg: Message): string {
+  if (msg.msgtype === 'm.image') return '🖼️ Đã gửi hình ảnh';
+  if (msg.msgtype === 'm.video') return '🎬 Đã gửi video';
+  if (msg.msgtype === 'm.audio') return '🎤 Tin nhắn thoại';
+  if (msg.msgtype === 'm.file') return `📎 ${msg.fileName || 'Tệp đính kèm'}`;
+  if (msg.msgtype === 'io.piechat.folder') return `📁 ${msg.fileName || 'Thư mục'}`;
+  if (msg.msgtype === 'io.piechat.sticker') return '🎨 Sticker';
+  if (msg.msgtype === 'io.piechat.poll') return '📊 Bình chọn mới';
+  if (msg.msgtype === 'io.piechat.reminder') return '⏰ Nhắc hẹn mới';
+  if (msg.msgtype === 'io.piechat.contact') return '📇 Danh thiếp';
+  const text = msg.content || '';
+  return text.length > 100 ? text.slice(0, 97) + '...' : text;
+}
+
+/**
+ * Notify user about new messages.
+ * Call this after each message poll with the new messages.
+ * Only notifies when tab is not focused.
+ */
+export function notifyNewMessages(
+  newMessages: Message[],
+  currentUserId: string,
+  activeRoomId: string | null,
+  resolveUserName: (userId: string) => string,
+  resolveRoomName: (roomId: string) => string,
+): void {
+  if (typeof window === 'undefined') return;
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+
+  for (const msg of newMessages) {
+    // Skip own messages
+    if (msg.senderId === currentUserId) continue;
+    // Skip temp messages
+    if (msg.id.startsWith('temp-')) continue;
+    // Skip vote messages  
+    if (msg.msgtype === 'io.piechat.poll.vote') continue;
+    // Skip already notified
+    if (_notifiedMessageIds.has(msg.id)) continue;
+    _notifiedMessageIds.add(msg.id);
+
+    // Trim tracked IDs
+    if (_notifiedMessageIds.size > MAX_NOTIFIED) {
+      const arr = Array.from(_notifiedMessageIds);
+      _notifiedMessageIds = new Set(arr.slice(-200));
+    }
+
+    // Only notify if tab is not focused OR message is from different room
+    if (isDocumentVisible() && msg.roomId === activeRoomId) continue;
+
+    const senderName = resolveUserName(msg.senderId);
+    const roomName = resolveRoomName(msg.roomId);
+    const body = getMessageBody(msg);
+
+    showNotification(`${senderName} • ${roomName}`, body, {
+      tag: `room-${msg.roomId}`,
+      data: {
+        url: `/chat/${encodeURIComponent(msg.roomId)}`,
+        roomId: msg.roomId,
+      },
+    });
+
+    // Also show in-app toast if tab is focused but different room
+    if (isDocumentVisible() && msg.roomId !== activeRoomId) {
+      showToast(`${senderName} • ${roomName}`, body);
+      playNotificationSound();
+    }
+
+    // Play sound if tab is not focused
+    if (!isDocumentVisible()) {
+      playNotificationSound();
+    }
+  }
+}
+
+/**
+ * Seed the notified message IDs set so that existing messages
+ * loaded on first render don't trigger notifications.
+ */
+export function seedNotifiedMessageIds(messageIds: string[]): void {
+  for (const id of messageIds) {
+    _notifiedMessageIds.add(id);
+  }
+}
+
+/**
+ * Init Capacitor local notifications (if available)
+ */
+export async function initCapacitorNotifications(): Promise<void> {
+  try {
+    const { Capacitor } = await import('@capacitor/core');
+    if (!Capacitor.isNativePlatform()) return;
+
+    // @ts-ignore — optional dependency, only available in Capacitor builds
+    const { LocalNotifications } = await import('@capacitor/local-notifications');
+    const perms = await LocalNotifications.requestPermissions();
+    if (perms.display !== 'granted') return;
+
+    // Handle notification tap
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await LocalNotifications.addListener('localNotificationActionPerformed', (action: any) => {
+      const url = action.notification.extra?.url as string;
+      if (url && typeof window !== 'undefined') {
+        window.location.href = url;
+      }
+    });
+  } catch {
+    // Capacitor not available (web)
+  }
 }

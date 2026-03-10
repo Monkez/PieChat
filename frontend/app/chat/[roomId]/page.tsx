@@ -15,7 +15,7 @@ import type { PollData } from '@/components/chat/poll-create-dialog';
 import { PollCreateDialog } from '@/components/chat/poll-create-dialog';
 import type { PollVote } from '@/components/chat/poll-card';
 import { ReminderCreateDialog, type ReminderData } from '@/components/chat/reminder-create-dialog';
-import { useChatNotifications, scheduleReminderNotification, schedulePollExpiryNotification } from '@/lib/services/chat-notification-service';
+import { useChatNotifications, scheduleReminderNotification, schedulePollExpiryNotification, notifyNewMessages, seedNotifiedMessageIds } from '@/lib/services/chat-notification-service';
 import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 
@@ -173,6 +173,30 @@ export default function RoomPage() {
         const localDrafts = prev.filter((item) => item.id.startsWith('temp-') && item.status !== 'sent');
         return [...msgs, ...localDrafts].sort((a, b) => a.timestamp - b.timestamp);
       });
+      // Sync poll votes from timeline
+      const serverVotes = matrixService.getLastPollVotes();
+      if (Object.keys(serverVotes).length > 0) {
+        setPollVotes(prev => {
+          const merged = { ...prev };
+          for (const [pollId, votes] of Object.entries(serverVotes)) {
+            merged[pollId] = votes;
+          }
+          return merged;
+        });
+      }
+      // Notify about new messages (only during silent polls, not initial load)
+      if (silent && currentUser?.id) {
+        notifyNewMessages(
+          msgs,
+          currentUser.id,
+          roomId,
+          (userId) => {
+            const member = room?.members.find(m => m.id === userId);
+            return member?.displayName || member?.username || userId;
+          },
+          () => room?.name || 'PieChat',
+        );
+      }
     } catch {
       setMessages((prev) => prev);
     } finally {
@@ -180,11 +204,17 @@ export default function RoomPage() {
         setLoadingMessages(false);
       }
     }
-  }, [roomId]);
+  }, [roomId, currentUser?.id, room]);
 
   useEffect(() => {
     setFirstLoadDone(false);
-    void loadMessages().finally(() => setFirstLoadDone(true));
+    void loadMessages().then(() => {
+      // Seed existing message IDs so they don't trigger notifications
+      setMessages(prev => {
+        seedNotifiedMessageIds(prev.map(m => m.id));
+        return prev;
+      });
+    }).finally(() => setFirstLoadDone(true));
     const timer = setInterval(() => {
       void loadMessages(true);
     }, 2500);

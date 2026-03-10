@@ -525,7 +525,8 @@ export function MessageBubble({
     if (isPoll) {
       try {
         const pollData = JSON.parse(msg.content) as PollInfo;
-        const votes = pollVotes?.[pollData.pollId] || [];
+        // Use local optimistic votes if available, otherwise use server-synced votes from content
+        const votes = pollVotes?.[pollData.pollId] ?? pollData.votes ?? [];
         return (
           <PollCard
             poll={{ ...pollData, votes }}

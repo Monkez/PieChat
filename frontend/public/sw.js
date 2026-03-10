@@ -1,5 +1,5 @@
-// PieChat Service Worker — Offline shell + cache API responses
-const CACHE_NAME = 'piechat-v1';
+// PieChat Service Worker — Offline shell + cache API responses + notifications
+const CACHE_NAME = 'piechat-v2';
 const SHELL_URLS = [
     '/',
     '/chat',
@@ -40,5 +40,27 @@ self.addEventListener('fetch', (event) => {
                 return response;
             })
             .catch(() => caches.match(event.request))
+    );
+});
+
+// ─── Notification Click Handler ─────────────────────────
+self.addEventListener('notificationclick', (event) => {
+    event.notification.close();
+
+    const url = event.notification.data?.url || '/chat';
+
+    event.waitUntil(
+        self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+            // Focus existing PieChat tab if available
+            for (const client of clients) {
+                if (client.url.includes('/chat') && 'focus' in client) {
+                    client.focus();
+                    client.navigate(url);
+                    return;
+                }
+            }
+            // Otherwise open new tab
+            return self.clients.openWindow(url);
+        })
     );
 });

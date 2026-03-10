@@ -671,17 +671,11 @@ class MatrixService {
 
   async showNotification(title: string, options?: NotificationOptions) {
     try {
-      const { sendNotification } = await import('./notification-service');
-      await sendNotification({
-        title,
-        body: options?.body || undefined,
-        icon: options?.icon?.toString(),
-      });
-    } catch {
-      // Fallback: direct web notification
       if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
         new Notification(title, options);
       }
+    } catch {
+      // Notification not available
     }
   }
 
@@ -1315,6 +1309,28 @@ class MatrixService {
       }
 
       const reactions = chunk.filter(e => e.type === 'm.reaction');
+
+      // Aggregate poll votes from all vote events
+      const pollVotesMap: Record<string, Array<{ optionId: string; userId: string }>> = {};
+      chunk.forEach(e => {
+        if (e.type === 'm.room.message') {
+          const msgtype = e.content?.msgtype as string;
+          if (msgtype === 'io.piechat.poll.vote') {
+            const voteInfo = e.content?.['io.piechat.poll.vote'] as { pollId?: string; optionIds?: string[] } | undefined;
+            if (voteInfo?.pollId && voteInfo?.optionIds) {
+              if (!pollVotesMap[voteInfo.pollId]) pollVotesMap[voteInfo.pollId] = [];
+              // Remove previous votes from same user, then add new
+              pollVotesMap[voteInfo.pollId] = pollVotesMap[voteInfo.pollId].filter(v => v.userId !== e.sender);
+              for (const optId of voteInfo.optionIds) {
+                pollVotesMap[voteInfo.pollId].push({ optionId: optId, userId: e.sender });
+              }
+            }
+          }
+        }
+      });
+      // Store poll votes for external access
+      this._lastPollVotes = pollVotesMap;
+
       // Group call events by callId
       const callMap: Record<string, { invite?: any, answer?: any, hangup?: any }> = {};
       chunk.forEach(e => {
@@ -1426,11 +1442,13 @@ class MatrixService {
             return null;
           }
 
-          // Parse poll messages — store full poll data as JSON in content
+          // Parse poll messages — store full poll data as JSON in content, inject aggregated votes
           if (msgtype === 'io.piechat.poll') {
             const pollInfo = event.content?.['io.piechat.poll'] as Record<string, unknown> | undefined;
             if (pollInfo) {
-              content = JSON.stringify(pollInfo);
+              const pollId = pollInfo.pollId as string;
+              const aggregatedVotes = pollVotesMap[pollId] || [];
+              content = JSON.stringify({ ...pollInfo, votes: aggregatedVotes });
             }
           }
 
@@ -1494,6 +1512,12 @@ class MatrixService {
     } catch (error) {
       throw error;
     }
+  }
+
+  /** Returns poll votes aggregated during the last getMessages() call */
+  private _lastPollVotes: Record<string, Array<{ optionId: string; userId: string }>> = {};
+  getLastPollVotes(): Record<string, Array<{ optionId: string; userId: string }>> {
+    return this._lastPollVotes;
   }
 
   async sendReaction(roomId: string, eventId: string, key: string): Promise<void> {
