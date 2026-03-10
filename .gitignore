@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+.next/
+out/
+build/
+dist/
+
+# Environment
+.env
+.env.local
+.env.production
+.env.development
+*.env
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Go
+backend/dendrite.yaml
+backend/*.db
+backend/*.log
+backend/media_store/
+backend/jetstream/
+backend/searchindex/
+
+# Auth service
+auth-service/node_modules/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Misc
+*.pem
+.vercel
