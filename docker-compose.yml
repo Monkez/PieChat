@@ -1,0 +1,105 @@
+# =============================================================================
+# PieChat — Docker Compose Production Stack
+# =============================================================================
+# Usage:
+#   1. Copy .env.production.example to .env
+#   2. Update YOUR_DOMAIN and secrets
+#   3. docker compose up -d --build
+# =============================================================================
+
+services:
+  # ─── Dendrite (Matrix Homeserver) ──────────────────────────────────────────
+  dendrite:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: piechat-dendrite
+    volumes:
+      - dendrite-config:/etc/dendrite
+      - dendrite-media:/etc/dendrite/media_store
+      - dendrite-searchindex:/etc/dendrite/searchindex
+      - dendrite-jetstream:/etc/dendrite/JetStream
+    ports:
+      - "127.0.0.1:8008:8008"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8008/_matrix/client/versions"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+
+  # ─── Auth Service (OTP + QR Login) ────────────────────────────────────────
+  auth-service:
+    build:
+      context: ./auth-service
+      dockerfile: Dockerfile
+    container_name: piechat-auth
+    ports:
+      - "127.0.0.1:4000:4000"
+    environment:
+      - PORT=4000
+      - NODE_ENV=production
+      - MATRIX_BASE_URL=http://dendrite:8008
+      - CORS_ORIGINS=${CORS_ORIGINS:-https://${DOMAIN}}
+      - DEV_MATRIX_PASSWORD=${DEV_MATRIX_PASSWORD:-}
+    depends_on:
+      dendrite:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ─── Frontend (Next.js) ───────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_MATRIX_BASE_URL=https://${DOMAIN}
+        - NEXT_PUBLIC_AUTH_BASE_URL=https://${DOMAIN}
+        - NEXT_PUBLIC_MATRIX_SERVER_NAME=${MATRIX_SERVER_NAME:-localhost}
+    container_name: piechat-frontend
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      - NODE_ENV=production
+    depends_on:
+      - dendrite
+      - auth-service
+    restart: unless-stopped
+
+  # ─── Nginx Reverse Proxy ──────────────────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: piechat-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./deploy/nginx/conf.d:/etc/nginx/conf.d:ro
+      - certbot-webroot:/var/www/certbot:ro
+      - certbot-certs:/etc/letsencrypt:ro
+    depends_on:
+      - frontend
+      - dendrite
+      - auth-service
+    restart: unless-stopped
+
+  # ─── Certbot (SSL Cert Auto-Renewal) ──────────────────────────────────────
+  certbot:
+    image: certbot/certbot
+    container_name: piechat-certbot
+    volumes:
+      - certbot-webroot:/var/www/certbot
+      - certbot-certs:/etc/letsencrypt
+    # Auto-renew every 12 hours
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done;'"
+    restart: unless-stopped
+
+volumes:
+  dendrite-config:
+  dendrite-media:
+  dendrite-searchindex:
+  dendrite-jetstream:
+  certbot-webroot:
+  certbot-certs:

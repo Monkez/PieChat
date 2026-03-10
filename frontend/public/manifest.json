@@ -1,0 +1,24 @@
+{
+    "name": "PieChat",
+    "short_name": "PieChat",
+    "description": "PieChat - Nền tảng nhắn tin doanh nghiệp",
+    "start_url": "/chat",
+    "display": "standalone",
+    "background_color": "#ffffff",
+    "theme_color": "#0068ff",
+    "orientation": "portrait-primary",
+    "icons": [
+        {
+            "src": "/PieChatIcon.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any maskable"
+        },
+        {
+            "src": "/PieChatIcon.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any maskable"
+        }
+    ]
+}

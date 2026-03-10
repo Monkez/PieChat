@@ -1,0 +1,18 @@
+{
+  "id": "animated-cats",
+  "name": "Mèo Động",
+  "author": "PieChat Community",
+  "version": "1.0.0",
+  "description": "Bộ sticker mèo động GIF siêu dễ thương",
+  "thumbnail": "cat-wave.gif",
+  "stickers": [
+    { "id": "cat-wave", "emoji": "👋", "tags": ["xin chào", "hello", "wave", "vẫy tay"], "file": "cat-wave.gif" },
+    { "id": "cat-love", "emoji": "❤️", "tags": ["yêu", "love", "heart", "thương"], "file": "cat-love.gif" },
+    { "id": "cat-laugh", "emoji": "😂", "tags": ["cười", "laugh", "haha", "lol"], "file": "cat-laugh.gif" },
+    { "id": "cat-cry", "emoji": "😢", "tags": ["khóc", "cry", "buồn", "sad"], "file": "cat-cry.gif" },
+    { "id": "cat-angry", "emoji": "😠", "tags": ["giận", "angry", "tức"], "file": "cat-angry.gif" },
+    { "id": "cat-sleep", "emoji": "😴", "tags": ["ngủ", "sleep", "zzz", "mệt"], "file": "cat-sleep.gif" },
+    { "id": "cat-dance", "emoji": "💃", "tags": ["nhảy", "dance", "vui", "party"], "file": "cat-dance.gif" },
+    { "id": "cat-thumbsup", "emoji": "👍", "tags": ["ok", "tốt", "like", "đồng ý"], "file": "cat-thumbsup.gif" }
+  ]
+}

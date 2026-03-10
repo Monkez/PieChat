@@ -1,0 +1,18 @@
+{
+  "id": "piepie-emotions",
+  "name": "PiePie Emotions",
+  "author": "PieChat",
+  "version": "1.0.0",
+  "description": "Bộ sticker cảm xúc PiePie mặc định",
+  "thumbnail": "happy.png",
+  "stickers": [
+    { "id": "happy", "emoji": "😊", "tags": ["vui", "happy", "smile"], "file": "happy.png" },
+    { "id": "love", "emoji": "😍", "tags": ["yêu", "love", "heart"], "file": "love.png" },
+    { "id": "sad", "emoji": "😢", "tags": ["buồn", "sad", "cry"], "file": "sad.png" },
+    { "id": "angry", "emoji": "😠", "tags": ["giận", "angry", "mad"], "file": "angry.png" },
+    { "id": "surprised", "emoji": "😲", "tags": ["ngạc nhiên", "surprised", "shocked"], "file": "surprised.png" },
+    { "id": "thumbsup", "emoji": "👍", "tags": ["ok", "tốt", "thumbsup", "like"], "file": "thumbsup.png" },
+    { "id": "laugh", "emoji": "😂", "tags": ["cười", "laugh", "lol", "haha"], "file": "laugh.png" },
+    { "id": "sleepy", "emoji": "😴", "tags": ["ngủ", "sleepy", "tired", "zzz"], "file": "sleepy.png" }
+  ]
+}

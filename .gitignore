@@ -42,6 +42,11 @@ auth-service/node_modules/
 *.log
 npm-debug.log*
 
+# Deploy (generated)
+deploy/dendrite-runtime.yaml
+deploy/nginx/conf.d/piechat.conf.bak
+.env
+
 # Misc
 *.pem
 .vercel

@@ -1,0 +1,8 @@
+node_modules
+.next
+android
+ios
+.capacitor
+out
+.git
+*.log
