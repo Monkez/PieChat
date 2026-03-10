@@ -6,7 +6,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Send, Paperclip, MoreVertical, Phone, Video, Search, UserPlus, Crown, ShieldCheck, Trash2, Users, GripVertical, Shield, MessageSquare, Plus, ArrowLeft } from 'lucide-react';
 import { MessageBubble } from '@/components/chat/message-bubble';
-import { ChatInput } from '@/components/chat/chat-input';
+import { ChatInput, type ReplyEditState } from '@/components/chat/chat-input';
 import { useMatrixStore } from '@/lib/store/matrix-store';
 import { matrixService, Message, UserDirectoryAccount } from '@/lib/services/matrix-service';
 import { useUiStore } from '@/lib/store/ui-store';
@@ -61,6 +61,9 @@ export default function RoomPage() {
   const [pollVotes, setPollVotes] = useState<Record<string, PollVote[]>>({});
   const [isPollDialogOpen, setIsPollDialogOpen] = useState(false);
   const [isReminderDialogOpen, setIsReminderDialogOpen] = useState(false);
+  const [replyEdit, setReplyEdit] = useState<ReplyEditState | null>(null);
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
+  const [remotePresence, setRemotePresence] = useState<string>('offline');
 
   // Enable notification checker
   useChatNotifications();
@@ -753,15 +756,98 @@ export default function RoomPage() {
 
   const handleMessageAction = (action: string, msg: Message) => {
     setActiveMenuMessageId(null);
-    console.log(`Action: ${action} on message ${msg.id}`);
-    // Implement actions here
-    if (action === 'delete') {
-      // TODO: Implement delete/redact
-      alert(t(language, 'featureNotReady') || 'Tính năng đang phát triển');
-    } else {
+    if (action === 'reply') {
+      const senderMember = room?.members.find(m => m.id === msg.senderId);
+      setReplyEdit({
+        mode: 'reply',
+        messageId: msg.id,
+        senderName: senderMember?.displayName || senderMember?.username || msg.senderId,
+        content: msg.content,
+      });
+    } else if (action === 'edit') {
+      setReplyEdit({
+        mode: 'edit',
+        messageId: msg.id,
+        senderName: '',
+        content: msg.content,
+      });
+    } else if (action === 'delete') {
+      if (confirm('Xóa tin nhắn này?')) {
+        matrixService.deleteMessage(roomId, msg.id).then(() => {
+          setMessages(prev => prev.filter(m => m.id !== msg.id));
+        }).catch(() => alert('Không thể xóa tin nhắn'));
+      }
+    } else if (action === 'forward') {
       alert(t(language, 'featureNotReady') || 'Tính năng đang phát triển');
     }
   };
+
+  const handleReplyMessage = useCallback(async (replyToId: string, content: string) => {
+    try {
+      await matrixService.sendReply(roomId, replyToId, content);
+      loadMessages(true);
+    } catch (err) {
+      console.error('Reply failed:', err);
+    }
+  }, [roomId, loadMessages]);
+
+  const handleEditMessage = useCallback(async (messageId: string, newContent: string) => {
+    try {
+      await matrixService.editMessage(roomId, messageId, newContent);
+      // Optimistic update
+      setMessages(prev => prev.map(m =>
+        m.id === messageId ? { ...m, content: newContent, edited: true } : m
+      ));
+    } catch (err) {
+      console.error('Edit failed:', err);
+    }
+  }, [roomId]);
+
+  const handleTyping = useCallback((typing: boolean) => {
+    matrixService.sendTyping(roomId, typing);
+  }, [roomId]);
+
+  // Poll typing users
+  useEffect(() => {
+    const interval = setInterval(() => {
+      try {
+        const users = matrixService.getTypingUsers(roomId);
+        if (users.length > 0) {
+          setTypingUsers(users.filter(u => u !== currentUser?.id));
+        } else {
+          setTypingUsers([]);
+        }
+      } catch {
+        // ignore
+      }
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [roomId, currentUser?.id]);
+
+  // Set presence online
+  useEffect(() => {
+    matrixService.setPresence('online');
+    const interval = setInterval(() => matrixService.setPresence('online'), 60000);
+    return () => {
+      clearInterval(interval);
+      matrixService.setPresence('unavailable');
+    };
+  }, []);
+
+  // Poll remote presence for DM rooms
+  useEffect(() => {
+    if (room?.type !== 'dm') return;
+    const remoteUser = room?.members.find(m => m.id !== currentUser?.id);
+    if (!remoteUser) return;
+    const fetchPresence = () => {
+      matrixService.getPresence(remoteUser.id).then(p => {
+        setRemotePresence(p.currently_active ? 'online' : p.presence);
+      });
+    };
+    fetchPresence();
+    const interval = setInterval(fetchPresence, 30000);
+    return () => clearInterval(interval);
+  }, [room?.type, room?.members, currentUser?.id]);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -780,14 +866,22 @@ export default function RoomPage() {
             <h2 className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">
               {headerName || t(language, 'roomLoading')}
             </h2>
-            <p className="truncate text-[11px] text-zinc-500 dark:text-zinc-400">
+            <p className="truncate text-[11px] text-zinc-500 dark:text-zinc-400 flex items-center gap-1">
               {isSelfNote
                 ? t(language, 'assistantPersonalNotes' as any)
-                : room?.type === 'group' && parentChannel
-                  ? `${parentChannel.name} • ${room.members.length} ${t(language, 'chatRoleMember').toLowerCase()}`
-                  : room?.type === 'channel'
-                    ? `${room.members.length} ${t(language, 'chatRoleMember').toLowerCase()}`
-                    : t(language, 'roomMembersOnline')}
+                : room?.type === 'dm'
+                  ? (<>
+                      <span className={cn(
+                        "inline-block h-2 w-2 rounded-full",
+                        remotePresence === 'online' ? "bg-emerald-500" : "bg-zinc-300 dark:bg-zinc-600"
+                      )} />
+                      {remotePresence === 'online' ? 'Đang hoạt động' : 'Ngoại tuyến'}
+                    </>)
+                  : room?.type === 'group' && parentChannel
+                    ? `${parentChannel.name} • ${room.members.length} ${t(language, 'chatRoleMember').toLowerCase()}`
+                    : room?.type === 'channel'
+                      ? `${room.members.length} ${t(language, 'chatRoleMember').toLowerCase()}`
+                      : t(language, 'roomMembersOnline')}
             </p>
           </div>
           <div className="flex items-center shrink-0">
@@ -1382,6 +1476,24 @@ export default function RoomPage() {
                   {t(language, 'roomSendFailedBanner')}
                 </p>
               )}
+              {/* Typing indicator */}
+              {typingUsers.length > 0 && (
+                <div className="px-4 py-1.5">
+                  <div className="flex items-center gap-2 text-xs text-zinc-400 dark:text-zinc-500">
+                    <div className="flex gap-0.5">
+                      <span className="h-1.5 w-1.5 rounded-full bg-sky-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <span className="h-1.5 w-1.5 rounded-full bg-sky-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <span className="h-1.5 w-1.5 rounded-full bg-sky-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
+                    <span className="text-[11px] italic">
+                      {typingUsers.map(u => {
+                        const member = room?.members.find(m => m.id === u);
+                        return member?.displayName || member?.username || u.split(':')[0].replace('@', '');
+                      }).join(', ')} đang nhập...
+                    </span>
+                  </div>
+                </div>
+              )}
               <ChatInput
                 onSendMessage={handleSendMessage}
                 onSendFiles={handleSendFiles}
@@ -1391,6 +1503,11 @@ export default function RoomPage() {
                 onSendSticker={handleSendSticker}
                 onOpenPollDialog={() => setIsPollDialogOpen(true)}
                 onOpenReminderDialog={() => setIsReminderDialogOpen(true)}
+                onTyping={handleTyping}
+                replyEdit={replyEdit}
+                onCancelReplyEdit={() => setReplyEdit(null)}
+                onEditMessage={handleEditMessage}
+                onReplyMessage={handleReplyMessage}
                 disabled={isReadOnlyForMe}
                 placeholder={isReadOnlyForMe ? t(language, 'chatRestrictSpeaking') : undefined}
               />

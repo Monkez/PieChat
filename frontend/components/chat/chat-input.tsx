@@ -1,9 +1,16 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Paperclip, Smile, Mic, Square, FolderOpen, File, X, Loader2, Contact, BarChart3, AlarmClock } from 'lucide-react';
+import { Send, Paperclip, Smile, Mic, Square, FolderOpen, File, X, Loader2, Contact, BarChart3, AlarmClock, Reply, Pencil } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { StickerPicker } from './sticker-picker';
+
+export interface ReplyEditState {
+  mode: 'reply' | 'edit';
+  messageId: string;
+  senderName: string;
+  content: string;
+}
 
 interface ChatInputProps {
   onSendMessage: (content: string) => void;
@@ -14,11 +21,16 @@ interface ChatInputProps {
   onSendSticker?: (packId: string, stickerId: string, stickerUrl: string) => void;
   onOpenPollDialog?: () => void;
   onOpenReminderDialog?: () => void;
+  onTyping?: (typing: boolean) => void;
+  replyEdit?: ReplyEditState | null;
+  onCancelReplyEdit?: () => void;
+  onEditMessage?: (messageId: string, newContent: string) => void;
+  onReplyMessage?: (messageId: string, content: string) => void;
   placeholder?: string;
   disabled?: boolean;
 }
 
-export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoice, onSendContact, onSendSticker, onOpenPollDialog, onOpenReminderDialog, placeholder, disabled }: ChatInputProps) {
+export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoice, onSendContact, onSendSticker, onOpenPollDialog, onOpenReminderDialog, onTyping, replyEdit, onCancelReplyEdit, onEditMessage, onReplyMessage, placeholder, disabled }: ChatInputProps) {
   const [message, setMessage] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -50,9 +62,35 @@ export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoic
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Set edit content when entering edit mode
+  useEffect(() => {
+    if (replyEdit?.mode === 'edit') {
+      setMessage(replyEdit.content);
+      textareaRef.current?.focus();
+    }
+  }, [replyEdit]);
+
   const handleSubmit = (e?: React.FormEvent) => {
     e?.preventDefault();
     if (disabled) return;
+
+    // Handle edit mode
+    if (replyEdit?.mode === 'edit' && message.trim()) {
+      onEditMessage?.(replyEdit.messageId, message.trim());
+      setMessage('');
+      onCancelReplyEdit?.();
+      if (textareaRef.current) textareaRef.current.style.height = 'auto';
+      return;
+    }
+
+    // Handle reply mode
+    if (replyEdit?.mode === 'reply' && message.trim()) {
+      onReplyMessage?.(replyEdit.messageId, message.trim());
+      setMessage('');
+      onCancelReplyEdit?.();
+      if (textareaRef.current) textareaRef.current.style.height = 'auto';
+      return;
+    }
 
     // Send pending files first
     if (pendingFiles.length > 0 && onSendFiles) {
@@ -68,6 +106,7 @@ export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoic
       setMessage('');
     }
 
+    onTyping?.(false);
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
@@ -80,10 +119,20 @@ export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoic
     }
   };
 
+  // Typing debounce
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setMessage(e.target.value);
     e.target.style.height = 'auto';
     e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
+
+    // Send typing indicator
+    onTyping?.(true);
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(() => {
+      onTyping?.(false);
+    }, 3000);
   };
 
   // ─── File Handling ────────────────────────────────────
@@ -248,7 +297,43 @@ export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoic
   }
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-0">
+      {/* Reply/Edit Preview Bar */}
+      {replyEdit && (
+        <div className={cn(
+          "flex items-center gap-2 rounded-t-2xl border border-b-0 px-3 py-2 text-sm",
+          replyEdit.mode === 'reply'
+            ? "border-sky-200 bg-sky-50/80 dark:border-sky-800/40 dark:bg-sky-950/30"
+            : "border-amber-200 bg-amber-50/80 dark:border-amber-800/40 dark:bg-amber-950/30"
+        )}>
+          <div className={cn(
+            "flex h-6 w-6 shrink-0 items-center justify-center rounded-full",
+            replyEdit.mode === 'reply'
+              ? "bg-sky-200 dark:bg-sky-800/40"
+              : "bg-amber-200 dark:bg-amber-800/40"
+          )}>
+            {replyEdit.mode === 'reply'
+              ? <Reply className="h-3 w-3 text-sky-600 dark:text-sky-400" />
+              : <Pencil className="h-3 w-3 text-amber-600 dark:text-amber-400" />
+            }
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className={cn(
+              "text-[11px] font-bold",
+              replyEdit.mode === 'reply' ? "text-sky-600 dark:text-sky-400" : "text-amber-600 dark:text-amber-400"
+            )}>
+              {replyEdit.mode === 'reply' ? `↩ ${replyEdit.senderName}` : '✏️ Chỉnh sửa tin nhắn'}
+            </p>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate">{replyEdit.content}</p>
+          </div>
+          <button
+            onClick={onCancelReplyEdit}
+            className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </div>
+      )}
       {/* Pending Files Preview */}
       {pendingFiles.length > 0 && (
         <div className="flex flex-wrap gap-2 px-2">

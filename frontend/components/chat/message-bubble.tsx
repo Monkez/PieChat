@@ -3,7 +3,7 @@
 import { useState, useRef, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import Image from 'next/image';
-import { MoreVertical, Reply, Forward, Info, Trash2, Repeat, Download, Play, Pause, FileIcon, Copy, Pin } from 'lucide-react';
+import { MoreVertical, Reply, Forward, Info, Trash2, Repeat, Download, Play, Pause, FileIcon, Copy, Pin, Pencil } from 'lucide-react';
 import { Message } from '@/lib/services/matrix-service';
 import { cn } from '@/lib/utils';
 import { Avatar } from '@/components/ui/avatar';
@@ -22,7 +22,7 @@ interface MessageBubbleProps {
   activeMenuId: string | null;
   setActiveMenuId: (id: string | null) => void;
   onReaction: (msgId: string, emoji: string) => void;
-  onMenuAction: (action: 'reply' | 'forward' | 'details' | 'delete', msg: Message) => void;
+  onMenuAction: (action: 'reply' | 'forward' | 'details' | 'delete' | 'edit', msg: Message) => void;
   onRetry: (msgId: string) => void;
   getStatusLabel: (status: Message['status']) => string;
   onContactAddFriend?: (userId: string) => void;
@@ -671,6 +671,18 @@ export function MessageBubble({
               </div>
               <span className="text-[11px] font-medium text-zinc-600 dark:text-zinc-400">{t(language, 'msgDelete' as any)}</span>
             </button>
+
+            {isMe && msg.msgtype !== 'm.image' && msg.msgtype !== 'm.video' && msg.msgtype !== 'm.file' && msg.msgtype !== 'm.audio' && (
+              <button
+                onClick={() => { onMenuAction('edit', msg); closeLongPress(); }}
+                className="flex flex-col items-center gap-1.5 rounded-xl py-3 active:bg-zinc-100 dark:active:bg-zinc-800 transition-colors"
+              >
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 dark:bg-amber-900/30">
+                  <Pencil className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                </div>
+                <span className="text-[11px] font-medium text-zinc-600 dark:text-zinc-400">Sửa</span>
+              </button>
+            )}
           </div>
 
           {/* Safe area bottom */}
@@ -789,6 +801,11 @@ export function MessageBubble({
                 <button onClick={() => onMenuAction('delete', msg)} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-900/20 transition-all text-nowrap">
                   <Trash2 className="h-4 w-4" /> {t(language, 'msgDelete' as any) || 'Delete'}
                 </button>
+                {isMe && msg.msgtype !== 'm.image' && msg.msgtype !== 'm.video' && msg.msgtype !== 'm.file' && msg.msgtype !== 'm.audio' && (
+                  <button onClick={() => onMenuAction('edit', msg)} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-900/20 transition-all text-nowrap">
+                    <Pencil className="h-4 w-4" /> Sửa
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -799,6 +816,21 @@ export function MessageBubble({
           <p className="mb-0.5 text-[11px] font-bold text-sky-600 dark:text-sky-400 select-none leading-none">
             {senderName}
           </p>
+        )}
+
+        {/* Reply-to reference */}
+        {msg.replyTo && msg.replyTo.body && (
+          <div className={cn(
+            "mb-1 rounded-lg px-2.5 py-1.5 text-xs border-l-2 cursor-pointer",
+            isMe
+              ? "bg-sky-200/50 border-sky-400 dark:bg-sky-800/20 dark:border-sky-500"
+              : "bg-zinc-100 border-zinc-300 dark:bg-zinc-700/50 dark:border-zinc-500"
+          )}>
+            <p className="font-bold text-[10px] text-sky-600 dark:text-sky-400 mb-0.5">
+              {msg.replyTo.senderId.split(':')[0].replace('@', '')}
+            </p>
+            <p className="text-zinc-500 dark:text-zinc-400 line-clamp-2">{msg.replyTo.body}</p>
+          </div>
         )}
 
         {/* Media / Sticker / Contact / Text Content */}
@@ -834,6 +866,9 @@ export function MessageBubble({
           )}
         >
           <span>{new Date(msg.timestamp).toLocaleString([], { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+          {msg.edited && (
+            <span className="italic opacity-70">đã sửa</span>
+          )}
           {isMe && (
             <span className="ml-1 opacity-80">
               {msg.status === 'sent' && '✓'}

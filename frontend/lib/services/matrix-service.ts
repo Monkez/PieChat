@@ -53,7 +53,9 @@ export interface Message {
   mimeType?: string;
   duration?: number;
   thumbnailUrl?: string;
-  uploadProgress?: number; // 0-100, for upload progress display
+  uploadProgress?: number;
+  replyTo?: { eventId: string; senderId: string; body: string };
+  edited?: boolean;
 }
 
 export interface UserDirectoryAccount {
@@ -1493,6 +1495,44 @@ class MatrixService {
             }
           }
 
+          // Parse reply-to
+          const relatesTo = event.content?.['m.relates_to'] as any;
+          let replyTo: Message['replyTo'] = undefined;
+          if (relatesTo?.['m.in_reply_to']?.event_id) {
+            const replyEventId = relatesTo['m.in_reply_to'].event_id;
+            const replyEvent = chunk.find((e: any) => e.event_id === replyEventId);
+            replyTo = {
+              eventId: replyEventId,
+              senderId: replyEvent?.sender || '',
+              body: (replyEvent?.content?.body as string) || '',
+            };
+            // Strip Matrix reply fallback from content
+            if (content.startsWith('> ')) {
+              const lines = content.split('\n');
+              const bodyStart = lines.findIndex((l: string) => !l.startsWith('> ') && l !== '');
+              if (bodyStart > 0) {
+                content = lines.slice(bodyStart).join('\n').trim();
+              }
+            }
+          }
+
+          // Check if this message was edited (has m.replace relation targeting it)
+          const editEvent = chunk.find((e: any) =>
+            e.content?.['m.relates_to']?.rel_type === 'm.replace' &&
+            e.content?.['m.relates_to']?.event_id === event.event_id
+          );
+          let edited = false;
+          if (editEvent) {
+            const newContent = editEvent.content?.['m.new_content'] as any;
+            if (newContent?.body) {
+              content = newContent.body as string;
+              edited = true;
+            }
+          }
+
+          // Skip m.replace events from showing as separate messages
+          if (relatesTo?.rel_type === 'm.replace') return null;
+
           return {
             id: event.event_id,
             roomId,
@@ -1509,6 +1549,8 @@ class MatrixService {
             mimeType,
             duration,
             thumbnailUrl,
+            replyTo,
+            edited,
           };
         })
         .filter(Boolean)
@@ -2193,6 +2235,111 @@ class MatrixService {
       isAssistant: true,
       markedAt: Date.now(),
     });
+  }
+
+  // ─── Reply to message ────────────────────────────────
+  async sendReply(roomId: string, replyToEventId: string, body: string): Promise<string> {
+    const txnId = `reply-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const res = await this.request<{ event_id: string }>(
+      `/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/send/m.room.message/${txnId}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({
+          msgtype: 'm.text',
+          body,
+          'm.relates_to': {
+            'm.in_reply_to': {
+              event_id: replyToEventId,
+            },
+          },
+        }),
+      },
+    );
+    return res.event_id;
+  }
+
+  // ─── Edit message ────────────────────────────────────
+  async editMessage(roomId: string, originalEventId: string, newBody: string): Promise<string> {
+    const txnId = `edit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const res = await this.request<{ event_id: string }>(
+      `/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/send/m.room.message/${txnId}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({
+          msgtype: 'm.text',
+          body: `* ${newBody}`,
+          'm.new_content': {
+            msgtype: 'm.text',
+            body: newBody,
+          },
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: originalEventId,
+          },
+        }),
+      },
+    );
+    return res.event_id;
+  }
+
+  // ─── Delete (redact) message ─────────────────────────
+  async deleteMessage(roomId: string, eventId: string, reason?: string): Promise<void> {
+    const txnId = `redact-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    await this.request(
+      `/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/redact/${encodeURIComponent(eventId)}/${txnId}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ reason: reason || 'deleted by user' }),
+      },
+    );
+  }
+
+  // ─── Typing indicator ───────────────────────────────
+  async sendTyping(roomId: string, typing: boolean, timeoutMs = 5000): Promise<void> {
+    const userId = this.getCurrentUserId();
+    if (!userId) return;
+    await this.request(
+      `/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/typing/${encodeURIComponent(userId)}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ typing, timeout: timeoutMs }),
+      },
+    ).catch(() => {}); // silently fail
+  }
+
+  // ─── Get typing users ───────────────────────────────
+  private _typingUsers: Record<string, string[]> = {};
+  getTypingUsers(roomId: string): string[] {
+    return this._typingUsers[roomId] || [];
+  }
+  setTypingUsers(roomId: string, userIds: string[]) {
+    this._typingUsers[roomId] = userIds;
+  }
+
+  // ─── Presence / Online status ────────────────────────
+  async setPresence(status: 'online' | 'offline' | 'unavailable', statusMsg?: string): Promise<void> {
+    const userId = this.getCurrentUserId();
+    if (!userId) return;
+    await this.request(
+      `/_matrix/client/v3/presence/${encodeURIComponent(userId)}/status`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({
+          presence: status,
+          status_msg: statusMsg || '',
+        }),
+      },
+    ).catch(() => {});
+  }
+
+  async getPresence(userId: string): Promise<{ presence: string; last_active_ago?: number; currently_active?: boolean }> {
+    try {
+      return await this.request<{ presence: string; last_active_ago?: number; currently_active?: boolean }>(
+        `/_matrix/client/v3/presence/${encodeURIComponent(userId)}/status`,
+      );
+    } catch {
+      return { presence: 'offline' };
+    }
   }
 }
 
