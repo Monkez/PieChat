@@ -301,7 +301,8 @@ export function notifyNewMessages(
   resolveRoomName: (roomId: string) => string,
 ): void {
   if (typeof window === 'undefined') return;
-  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+
+  const canUseBrowserNotif = 'Notification' in window && Notification.permission === 'granted';
 
   for (const msg of newMessages) {
     // Skip own messages
@@ -327,24 +328,20 @@ export function notifyNewMessages(
     const roomName = resolveRoomName(msg.roomId);
     const body = getMessageBody(msg);
 
-    showNotification(`${senderName} • ${roomName}`, body, {
-      tag: `room-${msg.roomId}`,
-      data: {
-        url: `/chat/${encodeURIComponent(msg.roomId)}`,
-        roomId: msg.roomId,
-      },
-    });
-
-    // Also show in-app toast if tab is focused but different room
-    if (isDocumentVisible() && msg.roomId !== activeRoomId) {
-      showToast(`${senderName} • ${roomName}`, body);
-      playNotificationSound();
+    // Browser notification (only works on HTTPS / localhost)
+    if (canUseBrowserNotif && !isDocumentVisible()) {
+      showNotification(`${senderName} • ${roomName}`, body, {
+        tag: `room-${msg.roomId}`,
+        data: {
+          url: `/chat/${encodeURIComponent(msg.roomId)}`,
+          roomId: msg.roomId,
+        },
+      });
     }
 
-    // Play sound if tab is not focused
-    if (!isDocumentVisible()) {
-      playNotificationSound();
-    }
+    // Always show in-app toast + sound (works on HTTP too)
+    showToast(`${senderName} • ${roomName}`, body);
+    playNotificationSound();
   }
 }
 
