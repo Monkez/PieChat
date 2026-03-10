@@ -719,10 +719,10 @@ export function MessageBubble({
           msg.status === 'failed' && "border-rose-300 bg-rose-50 dark:border-rose-900/50 dark:bg-rose-900/20"
         )}
       >
-        {/* Reaction Bar on Hover */}
-        {!msg.id.startsWith('temp-') && (
+        {/* Reaction Bar on Hover — hidden when menu is open */}
+        {!msg.id.startsWith('temp-') && activeMenuId !== msg.id && (
           <div className={cn(
-            "absolute z-50 hidden group-hover/msg:flex justify-center min-w-[220px]",
+            "absolute z-30 hidden group-hover/msg:flex justify-center min-w-[220px]",
             showAbove
               ? "bottom-full pb-2.5"
               : "top-full pt-2.5",
