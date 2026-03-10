@@ -10,9 +10,7 @@
 services:
   # ─── Dendrite (Matrix Homeserver) ──────────────────────────────────────────
   dendrite:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: matrixdotorg/dendrite-monolith:latest
     container_name: piechat-dendrite
     volumes:
       - dendrite-config:/etc/dendrite
@@ -23,7 +21,7 @@ services:
       - "127.0.0.1:8008:8008"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8008/_matrix/client/versions"]
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8008/_matrix/client/versions"]
       interval: 30s
       timeout: 10s
       retries: 5

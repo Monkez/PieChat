@@ -137,8 +137,8 @@ log "Step 6/7: Initializing Dendrite..."
 DENDRITE_VOL="piechat_dendrite-config"
 docker volume create $DENDRITE_VOL 2>/dev/null || true
 
-# Build Dendrite image first to get the generate-keys binary
-docker compose build dendrite
+# Pull Dendrite Docker image
+docker compose pull dendrite
 
 # Generate Matrix signing keys
 docker compose run --rm dendrite /usr/bin/generate-keys --private-key /etc/dendrite/matrix_key.pem
