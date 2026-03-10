@@ -52,6 +52,7 @@ import { useAssistantStore } from '@/lib/store/assistant-store';
 import { AssistantManagerModal } from '@/components/assistant-config-modal';
 import { App as CapApp } from '@capacitor/app';
 import jsQR from 'jsqr';
+import { NotificationPermissionBanner } from '@/components/notification-permission-banner';
 
 export default function ChatLayout({
   children,
@@ -2220,6 +2221,7 @@ export default function ChatLayout({
           </div>
         </div>
       )}
+    <NotificationPermissionBanner />
     </div >
   );
 }

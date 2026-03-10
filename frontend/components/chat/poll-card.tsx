@@ -35,6 +35,7 @@ interface PollCardProps {
 export function PollCard({ poll, currentUserId, isMe, onVote }: PollCardProps) {
   const [selectedOptions, setSelectedOptions] = useState<Set<string>>(new Set());
   const [hasVoted, setHasVoted] = useState(false);
+  const [isChanging, setIsChanging] = useState(false); // re-voting mode
   const [timeLeft, setTimeLeft] = useState('');
   const [isExpired, setIsExpired] = useState(false);
 
@@ -86,8 +87,10 @@ export function PollCard({ poll, currentUserId, isMe, onVote }: PollCardProps) {
 
   const maxVotes = Math.max(...Object.values(optionVoteCounts), 1);
 
+  const canVote = !isExpired && (!hasVoted || isChanging);
+
   const toggleOption = (optionId: string) => {
-    if (isExpired || hasVoted) return;
+    if (!canVote) return;
     setSelectedOptions(prev => {
       const next = new Set(prev);
       if (next.has(optionId)) {
@@ -104,9 +107,20 @@ export function PollCard({ poll, currentUserId, isMe, onVote }: PollCardProps) {
     if (selectedOptions.size === 0 || isExpired) return;
     onVote(poll.pollId, Array.from(selectedOptions));
     setHasVoted(true);
+    setIsChanging(false);
   };
 
-  const showResults = hasVoted || isExpired;
+  const handleChangeVote = () => {
+    setIsChanging(true);
+    setSelectedOptions(new Set());
+  };
+
+  const handleCancelChange = () => {
+    setIsChanging(false);
+    setSelectedOptions(new Set(myVotes));
+  };
+
+  const showResults = (hasVoted && !isChanging) || isExpired;
 
   return (
     <div className={cn(
@@ -200,7 +214,7 @@ export function PollCard({ poll, currentUserId, isMe, onVote }: PollCardProps) {
                 )}>
                   {opt.text}
                 </span>
-                {showResults && (
+              {showResults && (
                   <span className={cn(
                     "text-xs font-bold shrink-0",
                     isWinner ? "text-violet-600 dark:text-violet-400" : "text-zinc-400"
@@ -220,25 +234,47 @@ export function PollCard({ poll, currentUserId, isMe, onVote }: PollCardProps) {
           <Users className="h-3 w-3" />
           <span>{uniqueVoters} lượt bầu</span>
         </div>
-        {!hasVoted && !isExpired && (
-          <button
-            onClick={handleVote}
-            disabled={selectedOptions.size === 0}
-            className={cn(
-              "rounded-lg px-3 py-1.5 text-xs font-bold transition-all",
-              selectedOptions.size > 0
-                ? "bg-sky-500 text-white hover:bg-sky-600 active:scale-95 shadow-sm"
-                : "bg-zinc-100 text-zinc-400 cursor-not-allowed dark:bg-zinc-800 dark:text-zinc-600"
-            )}
-          >
-            Bình chọn
-          </button>
-        )}
-        {hasVoted && (
-          <span className="flex items-center gap-1 text-[10px] font-medium text-emerald-500">
-            <Check className="h-3 w-3" /> Đã bình chọn
-          </span>
-        )}
+        <div className="flex items-center gap-1.5">
+          {/* Vote / Re-vote button */}
+          {canVote && (
+            <button
+              onClick={handleVote}
+              disabled={selectedOptions.size === 0}
+              className={cn(
+                "rounded-lg px-3 py-1.5 text-xs font-bold transition-all",
+                selectedOptions.size > 0
+                  ? "bg-sky-500 text-white hover:bg-sky-600 active:scale-95 shadow-sm"
+                  : "bg-zinc-100 text-zinc-400 cursor-not-allowed dark:bg-zinc-800 dark:text-zinc-600"
+              )}
+            >
+              {isChanging ? 'Xác nhận' : 'Bình chọn'}
+            </button>
+          )}
+          {/* Cancel change button */}
+          {isChanging && (
+            <button
+              onClick={handleCancelChange}
+              className="rounded-lg px-2 py-1.5 text-xs text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 transition-colors"
+            >
+              Huỷ
+            </button>
+          )}
+          {/* Change vote button (only if voted, not expired, not already changing) */}
+          {hasVoted && !isExpired && !isChanging && (
+            <button
+              onClick={handleChangeVote}
+              className="rounded-lg px-2 py-1.5 text-xs text-sky-500 hover:bg-sky-50 dark:hover:bg-sky-900/20 transition-colors font-medium"
+            >
+              Đổi lựa chọn
+            </button>
+          )}
+          {/* Voted indicator */}
+          {hasVoted && !isChanging && (
+            <span className="flex items-center gap-1 text-[10px] font-medium text-emerald-500">
+              <Check className="h-3 w-3" /> Đã chọn
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );
