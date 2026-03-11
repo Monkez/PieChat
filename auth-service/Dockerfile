@@ -4,7 +4,7 @@ WORKDIR /app
 # Install build tools for native modules (better-sqlite3)
 RUN apk add --no-cache python3 make g++
 COPY package*.json ./
-RUN npm ci
+RUN npm install
 COPY tsconfig.json ./
 COPY src/ ./src/
 RUN npx tsc
@@ -15,7 +15,7 @@ ENV NODE_ENV=production
 # Install runtime deps for better-sqlite3
 RUN apk add --no-cache python3 make g++
 COPY --from=builder /app/package*.json ./
-RUN npm ci --omit=dev && apk del python3 make g++
+RUN npm install --omit=dev && apk del python3 make g++
 COPY --from=builder /app/dist/ ./dist/
 
 EXPOSE 4000
