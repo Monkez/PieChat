@@ -1,7 +1,7 @@
 {
     "name": "piechat-auth-service",
-    "version": "1.0.0",
-    "description": "PieChat Authentication Service — Standalone OTP & Device Trust",
+    "version": "2.0.0",
+    "description": "PieChat Authentication Service — OTP, Device Trust, Rate Limiting, Security Hardening",
     "main": "dist/index.js",
     "scripts": {
         "dev": "tsx watch src/index.ts",

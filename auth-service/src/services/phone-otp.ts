@@ -4,8 +4,11 @@
  * Standalone module (no Next.js dependency).
  * Manages OTP generation, verification, rate limiting,
  * trusted device tracking, and login event audit trail.
+ * 
+ * Security: Uses Node.js crypto module for all random generation.
  */
 
+import { randomBytes, randomInt } from 'crypto';
 import { appendLoginEventToRedis, persistOtpState, persistPhoneSecurityState } from './redis-store.js';
 
 // ─── Types ──────────────────────────────────────────────
@@ -86,32 +89,35 @@ globalWithAuthState.__piechatAuthState = authState;
 
 const { pendingOtps, trustedDevices, otpRequestTimestamps, passwordFailures, otpVerifyFailures, loginEvents, knownUsers } = authState;
 
-// ─── Constants ──────────────────────────────────────────
+// ─── Constants (configurable via env) ───────────────────
 
-const OTP_WINDOW_MS = 10 * 60 * 1000;       // 10 minutes
-const MAX_OTP_REQUESTS = 5;
-const PASSWORD_MAX_FAILURES = 5;
-const PASSWORD_BLOCK_MS = 15 * 60 * 1000;    // 15 minutes
-const OTP_MAX_FAILURES = 5;
-const OTP_BLOCK_MS = 10 * 60 * 1000;         // 10 minutes
+const OTP_WINDOW_MS = parseInt(process.env.OTP_WINDOW_MS || '') || 10 * 60 * 1000;       // 10 minutes
+const MAX_OTP_REQUESTS = parseInt(process.env.MAX_OTP_REQUESTS || '') || 5;
+const PASSWORD_MAX_FAILURES = parseInt(process.env.PASSWORD_MAX_FAILURES || '') || 5;
+const PASSWORD_BLOCK_MS = parseInt(process.env.PASSWORD_BLOCK_MS || '') || 15 * 60 * 1000;    // 15 minutes
+const OTP_MAX_FAILURES = parseInt(process.env.OTP_MAX_FAILURES || '') || 5;
+const OTP_BLOCK_MS = parseInt(process.env.OTP_BLOCK_MS || '') || 10 * 60 * 1000;         // 10 minutes
+const OTP_CODE_LENGTH = parseInt(process.env.OTP_CODE_LENGTH || '') || 6;
+const OTP_EXPIRY_MS = parseInt(process.env.OTP_EXPIRY_MS || '') || 5 * 60 * 1000;        // 5 minutes
+const TRUSTED_DEVICE_EXPIRY_DAYS = parseInt(process.env.TRUSTED_DEVICE_EXPIRY_DAYS || '') || 90;  // 90 days
 
-// ─── Utilities ──────────────────────────────────────────
+// ─── Secure Utilities ───────────────────────────────────
 
+/** Generate a cryptographically secure random token */
 function randomToken(length = 32): string {
-    const alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    let output = '';
-    for (let i = 0; i < length; i++) {
-        output += alphabet[Math.floor(Math.random() * alphabet.length)];
-    }
-    return output;
+    return randomBytes(length).toString('base64url').slice(0, length);
 }
 
+/** Generate a cryptographically secure 6-digit OTP code */
 function randomOtp(): string {
-    return String(Math.floor(100000 + Math.random() * 900000));
+    const min = Math.pow(10, OTP_CODE_LENGTH - 1);  // 100000 for 6 digits
+    const max = Math.pow(10, OTP_CODE_LENGTH) - 1;   // 999999 for 6 digits
+    return String(randomInt(min, max + 1));
 }
 
+/** Generate a unique event ID */
 function randomEventId(): string {
-    return `evt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    return `evt-${Date.now()}-${randomBytes(4).toString('hex')}`;  
 }
 
 // ─── Snapshots (for Redis persistence) ──────────────────
@@ -292,7 +298,7 @@ export function registerOtpRequest(phone: string): void {
 
 export function createPendingOtp(phone: string, matrixUsername: string, deviceId: string): PendingOtp {
     const normalized = normalizePhone(phone);
-    const token = randomToken();
+    const token = randomToken(48); // Longer token for better security
     const code = randomOtp();
     const pending: PendingOtp = {
         token,
@@ -300,10 +306,10 @@ export function createPendingOtp(phone: string, matrixUsername: string, deviceId
         matrixUsername,
         deviceId,
         code,
-        expiresAt: Date.now() + 5 * 60 * 1000,
+        expiresAt: Date.now() + OTP_EXPIRY_MS,
     };
     pendingOtps.set(token, pending);
-    void persistOtpState(token, snapshotOtp(token), 15 * 60);
+    void persistOtpState(token, snapshotOtp(token), Math.ceil(OTP_EXPIRY_MS / 1000) * 3);
     return pending;
 }
 

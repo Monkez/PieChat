@@ -36,6 +36,7 @@ export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
   const { language } = useUiStore();
   const { accent, setAccent, customColor, setCustomColor } = useThemeStore();
+  const [selectedSound, setSelectedSound] = useState<NotifSoundType>(() => getNotifSound());
 
   useEffect(() => {
     const loadDevices = async () => {
@@ -76,7 +77,7 @@ export default function SettingsPage() {
 
   return (
     <div className="flex h-screen bg-zinc-50 dark:bg-black overflow-y-auto">
-      <div className="mx-auto w-full max-w-3xl px-4 py-8 pb-24 lg:pb-8" style={{ paddingTop: 'max(2rem, env(safe-area-inset-top, 2rem))' }}>
+      <div className="mx-auto w-full max-w-3xl px-4 py-8 lg:pb-8" style={{ paddingTop: 'max(2rem, env(safe-area-inset-top, 2rem))', paddingBottom: 'calc(8rem + env(safe-area-inset-bottom, 0px))' }}>
         <div className="mb-6 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <Link href="/chat" className="rounded-full p-2 text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800 transition-colors">
@@ -152,10 +153,11 @@ export default function SettingsPage() {
                         key={s.value}
                         onClick={() => {
                           setNotifSound(s.value);
+                          setSelectedSound(s.value);
                           playNotifSoundPreview(s.value);
                         }}
                         className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
-                          getNotifSound() === s.value
+                          selectedSound === s.value
                             ? 'border-sky-500 bg-sky-50 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300 dark:border-sky-600'
                             : 'border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800'
                         }`}

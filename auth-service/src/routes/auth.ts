@@ -2,6 +2,10 @@
  * Auth Routes — POST /auth/request-otp, POST /auth/verify-otp
  *               GET /auth/devices, DELETE /auth/devices
  *               GET /auth/login-events
+ *               POST /auth/register, POST /auth/forgot-password
+ *               POST /auth/reset-password, POST /auth/change-password
+ *               POST /auth/deactivate-account
+ *               QR login flow, Link preview, Admin APIs
  */
 
 import { Router, type Request, type Response } from 'express';
@@ -30,6 +34,8 @@ import {
 } from '../services/phone-otp.js';
 import { getLoginEventsFromRedis } from '../services/redis-store.js';
 import { listAllUsers as dbListAllUsers, listAllRooms as dbListAllRooms, getPresenceData, getDevices, getRoomMemberships, getMediaStats, deleteUserFromDB } from '../services/dendrite-db.js';
+import { authRateLimit, registerRateLimit, adminRateLimit, linkPreviewRateLimit } from '../middleware/rate-limit.js';
+import { validatePassword, validatePhone, validateOtpCode, validateOtpToken, validateStringParam, validateUrl, validateMatrixUserId } from '../middleware/validators.js';
 
 const router = Router();
 
@@ -182,17 +188,24 @@ router.post('/request-otp', async (req: Request, res: Response) => {
 
 // ─── POST /auth/verify-otp ──────────────────────────────
 
-router.post('/verify-otp', async (req: Request, res: Response) => {
+router.post('/verify-otp', authRateLimit, async (req: Request, res: Response) => {
     const { otpToken, otpCode } = req.body as { otpToken?: string; otpCode?: string };
-    const token = String(otpToken ?? '');
-    const code = String(otpCode ?? '');
-    const ip = getClientIp(req);
-    const userAgent = req.headers['user-agent'] || '';
-
-    if (!token || !code) {
-        res.status(400).json({ error: 'Thiếu mã OTP' });
+    
+    const tokenResult = validateOtpToken(otpToken);
+    if (!tokenResult.valid) {
+        res.status(400).json({ error: tokenResult.error });
         return;
     }
+    const codeResult = validateOtpCode(otpCode);
+    if (!codeResult.valid) {
+        res.status(400).json({ error: codeResult.error });
+        return;
+    }
+    
+    const token = tokenResult.value;
+    const code = codeResult.value;
+    const ip = getClientIp(req);
+    const userAgent = req.headers['user-agent'] || '';
 
     const result = consumePendingOtp(token, code);
 
@@ -398,19 +411,22 @@ router.post('/qr/approve', async (req: Request, res: Response) => {
 });
 
 // ─── POST /auth/register — Public user registration ──────
-router.post('/register', async (req: Request, res: Response) => {
+router.post('/register', registerRateLimit, async (req: Request, res: Response) => {
     const { phone: rawPhone, password } = req.body as { phone?: string; password?: string };
-    const phone = normalizePhone(String(rawPhone || ''));
-    const pwd = String(password || '');
-
-    if (!phone || phone.length < 8) {
-        res.status(400).json({ error: 'Số điện thoại không hợp lệ' });
+    
+    const phoneResult = validatePhone(rawPhone);
+    if (!phoneResult.valid) {
+        res.status(400).json({ error: phoneResult.error });
         return;
     }
-    if (!pwd || pwd.length < 6) {
-        res.status(400).json({ error: 'Mật khẩu phải ít nhất 6 ký tự' });
+    const pwdResult = validatePassword(password);
+    if (!pwdResult.valid) {
+        res.status(400).json({ error: pwdResult.error });
         return;
     }
+    
+    const phone = normalizePhone(phoneResult.value);
+    const pwd = pwdResult.value;
 
     const serverName = process.env.DOMAIN || 'localhost';
     const matrixUsername = `vn_${phone}`;
@@ -515,7 +531,7 @@ router.post('/register', async (req: Request, res: Response) => {
 const pendingResets = new Map<string, { code: string; phone: string; matrixUsername: string; expiresAt: number }>();
 
 // ─── POST /auth/forgot-password — Send OTP for password reset ──
-router.post('/forgot-password', async (req: Request, res: Response) => {
+router.post('/forgot-password', authRateLimit, async (req: Request, res: Response) => {
     const { phone: rawPhone } = req.body as { phone?: string };
     const phone = normalizePhone(String(rawPhone || ''));
     if (!phone || phone.length < 8) {
@@ -554,7 +570,7 @@ router.post('/forgot-password', async (req: Request, res: Response) => {
 });
 
 // ─── POST /auth/reset-password — Verify OTP & reset password ──
-router.post('/reset-password', async (req: Request, res: Response) => {
+router.post('/reset-password', authRateLimit, async (req: Request, res: Response) => {
     const { phone: rawPhone, otp, newPassword } = req.body as { phone?: string; otp?: string; newPassword?: string };
     const phone = normalizePhone(String(rawPhone || ''));
     const code = String(otp || '');
@@ -615,7 +631,7 @@ router.post('/reset-password', async (req: Request, res: Response) => {
 });
 
 // ─── POST /auth/change-password — Change password (requires old password) ──
-router.post('/change-password', async (req: Request, res: Response) => {
+router.post('/change-password', authRateLimit, async (req: Request, res: Response) => {
     const { phone: rawPhone, oldPassword, newPassword } = req.body as { phone?: string; oldPassword?: string; newPassword?: string };
     const phone = normalizePhone(String(rawPhone || ''));
     const oldPwd = String(oldPassword || '');
@@ -669,8 +685,69 @@ router.post('/change-password', async (req: Request, res: Response) => {
     }
 });
 
+// ─── POST /auth/deactivate-account — User self-deactivation ─────
+router.post('/deactivate-account', authRateLimit, async (req: Request, res: Response) => {
+    const { phone: rawPhone, password } = req.body as { phone?: string; password?: string };
+    const phone = normalizePhone(String(rawPhone || ''));
+    const pwd = String(password || '');
+
+    if (!phone || !pwd) {
+        res.status(400).json({ error: 'Thiếu thông tin' });
+        return;
+    }
+
+    const matrixUsername = resolveMatrixUsername(phone);
+
+    // Verify password before allowing deactivation
+    const valid = await verifyPassword(matrixUsername, pwd);
+    if (!valid) {
+        res.status(401).json({ error: 'Mật khẩu không đúng' });
+        return;
+    }
+
+    const serverName = process.env.DOMAIN || 'localhost';
+    const userId = `@${matrixUsername}:${serverName}`;
+
+    try {
+        const token = await getAdminToken();
+        if (!token) {
+            res.status(500).json({ error: 'Không thể kết nối admin server' });
+            return;
+        }
+
+        // Evacuate user from all rooms
+        try {
+            await fetch(`${matrixBaseUrl}/_dendrite/admin/evacuateUser/${encodeURIComponent(userId)}`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}` },
+            });
+        } catch { /* best effort */ }
+
+        // Delete from DB
+        const match = userId.match(/^@(.+):(.+)$/);
+        if (match) {
+            const [, localpart, sName] = match;
+            deleteUserFromDB(localpart, sName);
+        }
+
+        addLoginEvent({
+            phone,
+            type: 'device_revoked',
+            success: true,
+            suspicious: false,
+            message: 'Tài khoản đã bị vô hiệu hóa bởi chính người dùng',
+        });
+
+        console.log(`[DeactivateAccount] User ${userId} deactivated`);
+        res.json({ success: true, message: 'Tài khoản đã được xoá thành công' });
+    } catch (err) {
+        console.error('[DeactivateAccount] Error:', err);
+        res.status(500).json({ error: 'Lỗi server' });
+    }
+});
+
 // ─── GET /auth/link-preview — Fetch URL metadata ─────────
-router.get('/link-preview', async (req: Request, res: Response) => {
+router.get('/link-preview', linkPreviewRateLimit, async (req: Request, res: Response) => {
     const url = String(req.query.url || '');
     if (!url || !url.startsWith('http')) {
         res.status(400).json({ error: 'Invalid URL' });
@@ -737,7 +814,7 @@ function isAdmin(req: Request): boolean {
 }
 
 // GET /auth/admin/recent-logs — all recent login events across all phones
-router.get('/admin/recent-logs', (req: Request, res: Response) => {
+router.get('/admin/recent-logs', adminRateLimit, (req: Request, res: Response) => {
     if (!isAdmin(req)) { res.status(403).json({ error: 'Unauthorized' }); return; }
     const allEvents = listAllLoginEvents();
     const limit = Number(req.query.limit || 100);
@@ -745,21 +822,21 @@ router.get('/admin/recent-logs', (req: Request, res: Response) => {
 });
 
 // GET /auth/admin/pending-otps — list active pending OTP codes
-router.get('/admin/pending-otps', (req: Request, res: Response) => {
+router.get('/admin/pending-otps', adminRateLimit, (req: Request, res: Response) => {
     if (!isAdmin(req)) { res.status(403).json({ error: 'Unauthorized' }); return; }
     const otps = listPendingOtps();
     res.json({ otps });
 });
 
 // GET /auth/admin/stats — overview statistics
-router.get('/admin/stats', (req: Request, res: Response) => {
+router.get('/admin/stats', adminRateLimit, (req: Request, res: Response) => {
     if (!isAdmin(req)) { res.status(403).json({ error: 'Unauthorized' }); return; }
     const stats = getAdminStats();
     res.json(stats);
 });
 
 // GET /auth/admin/config — server config info (dev password, etc.)
-router.get('/admin/config', (req: Request, res: Response) => {
+router.get('/admin/config', adminRateLimit, (req: Request, res: Response) => {
     if (!isAdmin(req)) { res.status(403).json({ error: 'Unauthorized' }); return; }
     res.json({
         devMatrixPassword: process.env.DEV_MATRIX_PASSWORD || '12345678',
@@ -1220,8 +1297,40 @@ router.get('/admin/system-info', async (req: Request, res: Response) => {
 
 // ─── Health check ───────────────────────────────────────
 
-router.get('/health', (_req: Request, res: Response) => {
-    res.json({ status: 'ok', service: 'piechat-auth', timestamp: Date.now() });
+router.get('/health', async (_req: Request, res: Response) => {
+    // Enhanced health check: verify Matrix server connectivity
+    let matrixOk = false;
+    let matrixLatencyMs = 0;
+    try {
+        const start = Date.now();
+        const matrixRes = await fetch(`${matrixBaseUrl}/_matrix/client/versions`, {
+            signal: AbortSignal.timeout(3000),
+        });
+        matrixLatencyMs = Date.now() - start;
+        matrixOk = matrixRes.ok;
+    } catch { /* Matrix unreachable */ }
+
+    const status = matrixOk ? 'ok' : 'degraded';
+    const statusCode = matrixOk ? 200 : 503;
+
+    res.status(statusCode).json({
+        status,
+        service: 'piechat-auth',
+        version: '2.0.0',
+        timestamp: Date.now(),
+        uptime: process.uptime(),
+        memory: {
+            rss: Math.round(process.memoryUsage().rss / 1024 / 1024),
+            heap: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+        },
+        dependencies: {
+            matrix: {
+                status: matrixOk ? 'connected' : 'unreachable',
+                url: matrixBaseUrl,
+                latencyMs: matrixLatencyMs,
+            },
+        },
+    });
 });
 
 export default router;
