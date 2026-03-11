@@ -79,6 +79,21 @@ function VoicePlayer({ url, duration, isMe }: { url: string; duration?: number; 
     audioRef.current.currentTime = x * (totalDuration || 1);
   };
 
+  const handleDownload = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const resp = await fetch(url);
+      const blob = await resp.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = `voice_${Date.now()}.ogg`;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { URL.revokeObjectURL(blobUrl); a.remove(); }, 100);
+    } catch { window.open(url, '_blank'); }
+  };
+
   const formatTime = (s: number) => {
     const mm = Math.floor(s / 60).toString().padStart(2, '0');
     const ss = Math.floor(s % 60).toString().padStart(2, '0');
@@ -122,6 +137,18 @@ function VoicePlayer({ url, duration, isMe }: { url: string; duration?: number; 
           <span>{formatTime(totalDuration)}</span>
         </div>
       </div>
+      <button
+        onClick={handleDownload}
+        className={cn(
+          "flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-all hover:scale-110 active:scale-95",
+          isMe
+            ? "text-sky-600/60 hover:text-sky-600 hover:bg-sky-200/50 dark:text-sky-400/60 dark:hover:text-sky-400 dark:hover:bg-sky-800/30"
+            : "text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 dark:hover:text-zinc-300 dark:hover:bg-zinc-700/50"
+        )}
+        title="Tải xuống"
+      >
+        <Download className="h-3.5 w-3.5" />
+      </button>
     </div>
   );
 }
