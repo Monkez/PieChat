@@ -228,18 +228,39 @@ export default function AdminPage() {
 
   // ─── Delete User ───────────────────────────────────────
   const deleteUser = async (userId: string) => {
-    if (!confirm(`Xác nhận xóa tài khoản ${userId}?`)) return;
+    if (!confirm(`Xác nhận xóa tài khoản ${userId}?\n\nUser sẽ bị đuổi khỏi tất cả phòng và tài khoản bị vô hiệu hóa.`)) return;
     try {
-      // Use auth service proxy for admin operations
-      showNotice('error', 'Chức năng xóa user cần Dendrite admin API (chưa hỗ trợ qua proxy)');
+      const res = await fetch(authUrl(`/admin/delete-user?key=${encodeURIComponent(adminKey)}`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
+      });
+      const data = (await res.json()) as { success?: boolean; details?: string[]; error?: string };
+      if (data.success) {
+        showNotice('success', `Đã xóa ${userId}: ${data.details?.join(', ')}`);
+        void loadUsers();
+      } else {
+        showNotice('error', data.error || 'Xóa thất bại');
+      }
     } catch { showNotice('error', 'Lỗi kết nối'); }
   };
 
   // ─── Delete Room ───────────────────────────────────────
   const deleteRoom = async (roomId: string) => {
-    if (!confirm(`Xác nhận xóa phòng ${roomId}?`)) return;
+    if (!confirm(`Xác nhận xóa phòng ${roomId}?\n\nTất cả thành viên sẽ bị đuổi khỏi phòng.`)) return;
     try {
-      showNotice('error', 'Chức năng xóa room cần Dendrite admin API (chưa hỗ trợ qua proxy)');
+      const res = await fetch(authUrl(`/admin/delete-room?key=${encodeURIComponent(adminKey)}`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomId }),
+      });
+      const data = (await res.json()) as { success?: boolean; affected?: number; error?: string };
+      if (data.success) {
+        showNotice('success', `Đã xóa phòng, ${data.affected || 0} thành viên bị đuổi`);
+        void loadRooms();
+      } else {
+        showNotice('error', data.error || 'Xóa phòng thất bại');
+      }
     } catch { showNotice('error', 'Lỗi kết nối'); }
   };
 
@@ -247,7 +268,17 @@ export default function AdminPage() {
   const handleResetPassword = async () => {
     if (!resetUserId || !resetPassword) return;
     try {
-      showNotice('error', 'Chức năng đổi MK cần Dendrite admin API (chưa hỗ trợ qua proxy)');
+      const res = await fetch(authUrl(`/admin/reset-password?key=${encodeURIComponent(adminKey)}`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: resetUserId, newPassword: resetPassword }),
+      });
+      const data = (await res.json()) as { success?: boolean; error?: string };
+      if (data.success) {
+        showNotice('success', `Đã đổi mật khẩu cho ${resetUserId}`);
+      } else {
+        showNotice('error', data.error || 'Đổi mật khẩu thất bại');
+      }
       setResetUserId(null);
       setResetPassword('');
     } catch { showNotice('error', 'Lỗi kết nối'); }
