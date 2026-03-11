@@ -4,7 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Send, Paperclip, MoreVertical, Phone, Video, Search, UserPlus, Crown, ShieldCheck, Trash2, Users, GripVertical, Shield, MessageSquare, Plus, ArrowLeft, FolderOpen } from 'lucide-react';
+import { Send, Paperclip, MoreVertical, Phone, Video, Search, UserPlus, Crown, ShieldCheck, Trash2, Users, GripVertical, Shield, MessageSquare, Plus, ArrowLeft, FolderOpen, X } from 'lucide-react';
 import { MessageBubble } from '@/components/chat/message-bubble';
 import { ChatInput, type ReplyEditState } from '@/components/chat/chat-input';
 import { MediaGallery } from '@/components/chat/media-gallery';
@@ -66,6 +66,8 @@ export default function RoomPage() {
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const [remotePresence, setRemotePresence] = useState<string>('offline');
   const [isGalleryOpen, setIsGalleryOpen] = useState(false);
+  const [forwardingMessage, setForwardingMessage] = useState<Message | null>(null);
+  const [forwardSearch, setForwardSearch] = useState('');
 
   // Enable notification checker
   useChatNotifications();
@@ -790,7 +792,7 @@ export default function RoomPage() {
         }).catch(() => alert('Không thể xóa tin nhắn'));
       }
     } else if (action === 'forward') {
-      alert(t(language, 'featureNotReady') || 'Tính năng đang phát triển');
+      setForwardingMessage(msg);
     }
   };
 
@@ -1561,6 +1563,71 @@ export default function RoomPage() {
         onClose={() => setIsGalleryOpen(false)}
         messages={messages}
       />
+
+      {/* Forward Message Modal */}
+      {forwardingMessage && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-sm mx-4 rounded-2xl bg-white dark:bg-zinc-900 shadow-2xl border border-zinc-200 dark:border-zinc-700 overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-700">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">Chuyển tiếp tin nhắn</h3>
+                <button onClick={() => { setForwardingMessage(null); setForwardSearch(''); }} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="mt-2 rounded-lg bg-zinc-50 dark:bg-zinc-800 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-400 line-clamp-2">
+                {forwardingMessage.content}
+              </div>
+              <input
+                type="text"
+                value={forwardSearch}
+                onChange={(e) => setForwardSearch(e.target.value)}
+                placeholder="Tìm cuộc hội thoại..."
+                className="mt-2 w-full rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+                autoFocus
+              />
+            </div>
+            <div className="max-h-64 overflow-y-auto p-2 space-y-0.5">
+              {rooms
+                .filter(r => r.id !== roomId)
+                .filter(r => {
+                  if (!forwardSearch.trim()) return true;
+                  const q = forwardSearch.toLowerCase();
+                  return (r.name || '').toLowerCase().includes(q) ||
+                    r.members.some(m => (m.displayName || m.username || '').toLowerCase().includes(q));
+                })
+                .slice(0, 20)
+                .map(r => {
+                  const rName = r.name || r.members.find(m => m.id !== currentUser?.id)?.displayName || r.id;
+                  return (
+                    <button
+                      key={r.id}
+                      onClick={async () => {
+                        try {
+                          await sendMessage(r.id, `↪️ [Chuyển tiếp]\n${forwardingMessage.content}`);
+                          setForwardingMessage(null);
+                          setForwardSearch('');
+                          router.push(`/chat/${encodeURIComponent(r.id)}`);
+                        } catch {
+                          alert('Chuyển tiếp thất bại');
+                        }
+                      }}
+                      className="flex w-full items-center gap-3 px-3 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-left"
+                    >
+                      <div className="h-9 w-9 shrink-0 rounded-full bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center text-sky-600 dark:text-sky-400 font-bold text-sm">
+                        {rName.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">{rName}</p>
+                        <p className="truncate text-[10px] text-zinc-500">{r.type === 'dm' ? 'Tin nhắn' : r.type === 'group' ? 'Nhóm' : 'Kênh'}</p>
+                      </div>
+                    </button>
+                  );
+                })}
+            </div>
+          </div>
+        </div>
+      )}
     </div >
   );
 }
