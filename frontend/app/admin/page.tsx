@@ -11,6 +11,10 @@ interface MatrixUser {
   avatar_url?: string;
   phone?: string;
   lastSeen?: number;
+  is_online?: boolean;
+  device_count?: number;
+  created_ts?: number;
+  is_deactivated?: boolean;
 }
 
 interface MatrixRoom {
@@ -19,6 +23,9 @@ interface MatrixRoom {
   joined_members?: number;
   topic?: string;
   creator?: string;
+  room_version?: string;
+  members?: string[];
+  is_stub?: boolean;
 }
 
 interface OtpLogEntry {
@@ -98,6 +105,9 @@ export default function AdminPage() {
   const [notice, setNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [resetUserId, setResetUserId] = useState<string | null>(null);
   const [resetPassword, setResetPassword] = useState('');
+  // Dashboard
+  interface DashboardStats { users: { total: number; online: number; deactivated: number }; rooms: { total: number; active: number }; devices: { total: number }; media: { totalFiles: number; totalSize: number }; memberships: { total: number } }
+  const [dashStats, setDashStats] = useState<DashboardStats | null>(null);
 
   // Restore session
   useEffect(() => {
@@ -146,8 +156,12 @@ export default function AdminPage() {
   // ─── Load System Info ─────────────────────────────────
   const loadSystemInfo = useCallback(async () => {
     try {
-      const res = await adminFetch('/admin/system-info');
-      if (res.ok) setSystemInfo((await res.json()) as SystemInfo);
+      const [sysRes, dashRes] = await Promise.all([
+        adminFetch('/admin/system-info'),
+        adminFetch('/admin/dashboard'),
+      ]);
+      if (sysRes.ok) setSystemInfo((await sysRes.json()) as SystemInfo);
+      if (dashRes.ok) setDashStats((await dashRes.json()) as DashboardStats);
     } catch { /* ignore */ }
   }, [adminFetch]);
 
@@ -157,8 +171,18 @@ export default function AdminPage() {
     try {
       const res = await adminFetch('/admin/users');
       if (res.ok) {
-        const data = (await res.json()) as { users: Array<{ user_id: string; display_name?: string; avatar_url?: string; phone?: string; lastSeen?: number }> };
-        setUsers((data.users || []).map(u => ({ name: u.user_id, displayname: u.display_name, avatar_url: u.avatar_url, phone: u.phone, lastSeen: u.lastSeen })));
+        const data = (await res.json()) as { users: Array<{ user_id: string; display_name?: string; avatar_url?: string; phone?: string; last_seen?: number; is_online?: boolean; device_count?: number; created_ts?: number; is_deactivated?: boolean }> };
+        setUsers((data.users || []).map(u => ({
+          name: u.user_id,
+          displayname: u.display_name,
+          avatar_url: u.avatar_url,
+          phone: u.phone,
+          lastSeen: u.last_seen,
+          is_online: u.is_online,
+          device_count: u.device_count,
+          created_ts: u.created_ts,
+          is_deactivated: u.is_deactivated,
+        })));
       } else {
         showNotice('error', `Lỗi tải người dùng: ${res.status}`);
       }
@@ -389,11 +413,15 @@ export default function AdminPage() {
                     <Users className="h-5 w-5 text-sky-600 dark:text-sky-400" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">{users.length || '—'}</p>
+                    <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">{dashStats?.users.total ?? '—'}</p>
                     <p className="text-[11px] text-zinc-400">Người dùng</p>
                   </div>
                 </div>
-                <button onClick={() => { setActiveTab('users'); void loadUsers(); }} className="text-[11px] text-sky-500 hover:text-sky-600 font-medium">Xem chi tiết →</button>
+                <div className="flex items-center gap-2 text-[11px]">
+                  <span className="flex items-center gap-1 text-emerald-500"><div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />{dashStats?.users.online ?? 0} online</span>
+                  {(dashStats?.users.deactivated ?? 0) > 0 && <span className="text-red-400">{dashStats?.users.deactivated} disabled</span>}
+                </div>
+                <button onClick={() => { setActiveTab('users'); void loadUsers(); }} className="text-[11px] text-sky-500 hover:text-sky-600 font-medium mt-1">Xem chi tiết →</button>
               </div>
               <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 shadow-sm">
                 <div className="flex items-center gap-3 mb-2">
@@ -401,11 +429,12 @@ export default function AdminPage() {
                     <MessageSquare className="h-5 w-5 text-violet-600 dark:text-violet-400" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">{rooms.length || '—'}</p>
+                    <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">{dashStats?.rooms.total ?? '—'}</p>
                     <p className="text-[11px] text-zinc-400">Phòng chat</p>
                   </div>
                 </div>
-                <button onClick={() => { setActiveTab('rooms'); void loadRooms(); }} className="text-[11px] text-violet-500 hover:text-violet-600 font-medium">Xem chi tiết →</button>
+                <p className="text-[11px] text-violet-500">{dashStats?.rooms.active ?? 0} phòng hoạt động</p>
+                <button onClick={() => { setActiveTab('rooms'); void loadRooms(); }} className="text-[11px] text-violet-500 hover:text-violet-600 font-medium mt-1">Xem chi tiết →</button>
               </div>
               <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 shadow-sm">
                 <div className="flex items-center gap-3 mb-2">
@@ -413,11 +442,11 @@ export default function AdminPage() {
                     <Server className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">✓</p>
-                    <p className="text-[11px] text-zinc-400">Server Status</p>
+                    <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">{dashStats?.devices.total ?? '—'}</p>
+                    <p className="text-[11px] text-zinc-400">Thiết bị</p>
                   </div>
                 </div>
-                <p className="text-[11px] text-emerald-500 font-medium">Hoạt động bình thường</p>
+                <p className="text-[11px] text-emerald-500 font-medium">Đã kết nối</p>
               </div>
               <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 shadow-sm">
                 <div className="flex items-center gap-3 mb-2">
@@ -425,11 +454,11 @@ export default function AdminPage() {
                     <HardDrive className="h-5 w-5 text-amber-600 dark:text-amber-400" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">{systemInfo ? '✓' : '—'}</p>
-                    <p className="text-[11px] text-zinc-400">System</p>
+                    <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">{dashStats?.media.totalFiles ?? '—'}</p>
+                    <p className="text-[11px] text-zinc-400">Media files</p>
                   </div>
                 </div>
-                <p className="text-[11px] text-zinc-400">{systemInfo?.os.hostname || 'Loading...'}</p>
+                <p className="text-[11px] text-zinc-400">{dashStats ? formatBytes(dashStats.media.totalSize) : '—'} tổng dung lượng</p>
               </div>
             </div>
 
@@ -523,8 +552,9 @@ export default function AdminPage() {
             </div>
 
             <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-sm overflow-hidden">
-              <div className="px-4 py-3 border-b border-zinc-100 dark:border-zinc-800">
+              <div className="px-4 py-3 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
                 <p className="text-sm font-bold text-zinc-900 dark:text-zinc-100">{filteredUsers.length} người dùng</p>
+                <div className="flex items-center gap-1 text-[11px] text-emerald-500"><div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />{filteredUsers.filter(u => u.is_online).length} online</div>
               </div>
               <div className="max-h-[500px] overflow-y-auto">
                 {usersLoading ? (
@@ -537,35 +567,44 @@ export default function AdminPage() {
                   <table className="w-full text-sm">
                     <thead className="bg-zinc-50 dark:bg-zinc-800/50 sticky top-0">
                       <tr>
-                        <th className="text-left px-4 py-2 text-[11px] uppercase tracking-wider text-zinc-400 font-semibold">User ID</th>
-                        <th className="text-left px-4 py-2 text-[11px] uppercase tracking-wider text-zinc-400 font-semibold hidden sm:table-cell">Tên</th>
-                        <th className="text-left px-4 py-2 text-[11px] uppercase tracking-wider text-zinc-400 font-semibold">SĐT</th>
-                        <th className="text-left px-4 py-2 text-[11px] uppercase tracking-wider text-zinc-400 font-semibold hidden md:table-cell">Mật khẩu</th>
-                        <th className="text-right px-4 py-2 text-[11px] uppercase tracking-wider text-zinc-400 font-semibold">Thao tác</th>
+                        <th className="text-center px-2 py-2 text-[11px] uppercase tracking-wider text-zinc-400 font-semibold w-8"></th>
+                        <th className="text-left px-3 py-2 text-[11px] uppercase tracking-wider text-zinc-400 font-semibold">User</th>
+                        <th className="text-left px-3 py-2 text-[11px] uppercase tracking-wider text-zinc-400 font-semibold">SĐT</th>
+                        <th className="text-center px-3 py-2 text-[11px] uppercase tracking-wider text-zinc-400 font-semibold hidden md:table-cell">Thiết bị</th>
+                        <th className="text-left px-3 py-2 text-[11px] uppercase tracking-wider text-zinc-400 font-semibold hidden lg:table-cell">Lần cuối</th>
+                        <th className="text-right px-3 py-2 text-[11px] uppercase tracking-wider text-zinc-400 font-semibold">Thao tác</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
                       {filteredUsers.map((user) => {
                         const phone = user.phone || extractPhone(user.name);
                         return (
-                          <tr key={user.name} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors">
-                            <td className="px-4 py-3"><p className="font-mono text-xs text-zinc-700 dark:text-zinc-300">{user.name}</p></td>
-                            <td className="px-4 py-3 hidden sm:table-cell text-xs text-zinc-500">{user.displayname || '—'}</td>
-                            <td className="px-4 py-3">
+                          <tr key={user.name} className={`hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors ${user.is_deactivated ? 'opacity-50' : ''}`}>
+                            <td className="px-2 py-3 text-center">
+                              <div className={`h-2.5 w-2.5 rounded-full mx-auto ${user.is_online ? 'bg-emerald-500 animate-pulse' : 'bg-zinc-300 dark:bg-zinc-600'}`} title={user.is_online ? 'Online' : 'Offline'} />
+                            </td>
+                            <td className="px-3 py-3">
+                              <p className="font-medium text-xs text-zinc-800 dark:text-zinc-200">{user.displayname || user.name.split(':')[0]?.replace('@', '')}</p>
+                              <p className="font-mono text-[10px] text-zinc-400 truncate max-w-[180px]">{user.name}</p>
+                            </td>
+                            <td className="px-3 py-3">
                               <div className="flex items-center gap-1">
                                 <Phone className="h-3 w-3 text-zinc-400" />
-                                <span className="font-mono text-xs text-emerald-600 dark:text-emerald-400">{phone}</span>
-                                {phone !== '—' && (
+                                <span className="font-mono text-xs text-emerald-600 dark:text-emerald-400">{phone || '—'}</span>
+                                {phone && phone !== '—' && phone !== '(admin)' && (
                                   <button onClick={() => { navigator.clipboard.writeText(phone); showNotice('success', 'Đã copy SĐT'); }} className="text-zinc-400 hover:text-zinc-600">
                                     <Copy className="h-3 w-3" />
                                   </button>
                                 )}
                               </div>
                             </td>
-                            <td className="px-4 py-3 hidden md:table-cell">
-                              <span className="text-xs text-zinc-400">🔒 Hashed</span>
+                            <td className="px-3 py-3 text-center hidden md:table-cell">
+                              <span className="text-xs text-zinc-500">{user.device_count || 0}</span>
                             </td>
-                            <td className="px-4 py-3 text-right">
+                            <td className="px-3 py-3 hidden lg:table-cell">
+                              <span className="text-[10px] text-zinc-400">{user.lastSeen ? new Date(user.lastSeen).toLocaleString() : '—'}</span>
+                            </td>
+                            <td className="px-3 py-3 text-right">
                               <div className="flex items-center justify-end gap-1">
                                 <button onClick={() => { setResetUserId(user.name); setResetPassword(''); }} className="h-7 w-7 rounded-lg flex items-center justify-center text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors" title="Đổi mật khẩu">
                                   <Key className="h-3.5 w-3.5" />
@@ -624,25 +663,43 @@ export default function AdminPage() {
                   <table className="w-full text-sm">
                     <thead className="bg-zinc-50 dark:bg-zinc-800/50 sticky top-0">
                       <tr>
-                        <th className="text-left px-4 py-2 text-[11px] uppercase tracking-wider text-zinc-400 font-semibold">Tên phòng</th>
-                        <th className="text-left px-4 py-2 text-[11px] uppercase tracking-wider text-zinc-400 font-semibold hidden sm:table-cell">Room ID</th>
-                        <th className="text-center px-4 py-2 text-[11px] uppercase tracking-wider text-zinc-400 font-semibold hidden md:table-cell">Thành viên</th>
-                        <th className="text-right px-4 py-2 text-[11px] uppercase tracking-wider text-zinc-400 font-semibold">Thao tác</th>
+                        <th className="text-left px-3 py-2 text-[11px] uppercase tracking-wider text-zinc-400 font-semibold">Phòng</th>
+                        <th className="text-center px-3 py-2 text-[11px] uppercase tracking-wider text-zinc-400 font-semibold">TV</th>
+                        <th className="text-left px-3 py-2 text-[11px] uppercase tracking-wider text-zinc-400 font-semibold hidden md:table-cell">Thành viên</th>
+                        <th className="text-left px-3 py-2 text-[11px] uppercase tracking-wider text-zinc-400 font-semibold hidden lg:table-cell">Chi tiết</th>
+                        <th className="text-right px-3 py-2 text-[11px] uppercase tracking-wider text-zinc-400 font-semibold">Thao tác</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
                       {filteredRooms.map((room) => (
                         <tr key={room.room_id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors">
-                          <td className="px-4 py-3"><p className="font-medium text-zinc-700 dark:text-zinc-300">{room.name || '(Không tên)'}</p></td>
-                          <td className="px-4 py-3 hidden sm:table-cell">
-                            <div className="flex items-center gap-1">
-                              <p className="font-mono text-[11px] text-zinc-500 truncate max-w-[200px]">{room.room_id}</p>
-                              <button onClick={() => { navigator.clipboard.writeText(room.room_id); showNotice('success', 'Đã copy'); }} className="text-zinc-400 hover:text-zinc-600"><Copy className="h-3 w-3" /></button>
+                          <td className="px-3 py-3">
+                            <p className="font-medium text-xs text-zinc-800 dark:text-zinc-200">{room.name || '(Không tên)'}</p>
+                            <p className="font-mono text-[10px] text-zinc-400 truncate max-w-[180px]">{room.room_id}</p>
+                            {room.topic && <p className="text-[10px] text-zinc-400 italic mt-0.5 truncate max-w-[200px]">{room.topic}</p>}
+                          </td>
+                          <td className="px-3 py-3 text-center">
+                            <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-sky-100 dark:bg-sky-900/30 text-xs font-bold text-sky-600 dark:text-sky-400">{room.joined_members ?? 0}</span>
+                          </td>
+                          <td className="px-3 py-3 hidden md:table-cell">
+                            <div className="flex flex-wrap gap-1 max-w-[200px]">
+                              {(room.members || []).slice(0, 5).map(m => (
+                                <span key={m} className="text-[9px] bg-zinc-100 dark:bg-zinc-800 text-zinc-500 px-1.5 py-0.5 rounded">{m.split(':')[0]?.replace('@', '')}</span>
+                              ))}
+                              {(room.members?.length || 0) > 5 && <span className="text-[9px] text-zinc-400">+{(room.members?.length || 0) - 5}</span>}
                             </div>
                           </td>
-                          <td className="px-4 py-3 text-center hidden md:table-cell text-zinc-500">{room.joined_members ?? '—'}</td>
-                          <td className="px-4 py-3 text-right">
-                            <button onClick={() => deleteRoom(room.room_id)} className="h-7 w-7 rounded-lg flex items-center justify-center text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors" title="Xóa phòng"><Trash2 className="h-3.5 w-3.5" /></button>
+                          <td className="px-3 py-3 hidden lg:table-cell">
+                            <div className="text-[10px] text-zinc-400 space-y-0.5">
+                              {room.creator && <p>Tạo bởi: {room.creator.split(':')[0]?.replace('@', '')}</p>}
+                              {room.room_version && <p>Version: {room.room_version}</p>}
+                            </div>
+                          </td>
+                          <td className="px-3 py-3 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <button onClick={() => { navigator.clipboard.writeText(room.room_id); showNotice('success', 'Đã copy Room ID'); }} className="h-7 w-7 rounded-lg flex items-center justify-center text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors" title="Copy ID"><Copy className="h-3.5 w-3.5" /></button>
+                              <button onClick={() => deleteRoom(room.room_id)} className="h-7 w-7 rounded-lg flex items-center justify-center text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors" title="Xóa phòng"><Trash2 className="h-3.5 w-3.5" /></button>
+                            </div>
                           </td>
                         </tr>
                       ))}

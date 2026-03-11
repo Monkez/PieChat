@@ -44,6 +44,8 @@ services:
       - REGISTRATION_SHARED_SECRET=${REGISTRATION_SHARED_SECRET:-}
       - ADMIN_SECRET=${ADMIN_SECRET:-piechat-admin-dev}
       - DOMAIN=${DOMAIN:-localhost}
+    volumes:
+      - dendrite-config:/dendrite-data:ro
     depends_on:
       dendrite:
         condition: service_healthy

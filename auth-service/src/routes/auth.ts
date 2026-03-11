@@ -29,6 +29,7 @@ import {
     listKnownUsers,
 } from '../services/phone-otp.js';
 import { getLoginEventsFromRedis } from '../services/redis-store.js';
+import { listAllUsers as dbListAllUsers, listAllRooms as dbListAllRooms, getPresenceData, getDevices, getRoomMemberships, getMediaStats } from '../services/dendrite-db.js';
 
 const router = Router();
 
@@ -507,86 +508,159 @@ async function getAdminToken(): Promise<string | null> {
     return null;
 }
 
-// GET /auth/admin/users — list all tracked users
+// GET /auth/admin/users — list ALL users from Dendrite database
 router.get('/admin/users', async (req: Request, res: Response) => {
     if (!isAdmin(req)) { res.status(403).json({ error: 'Unauthorized' }); return; }
     
+    const serverName = process.env.DOMAIN || 'localhost';
     const known = listKnownUsers();
-    const token = await getAdminToken();
-    const serverName = process.env.MATRIX_SERVER_NAME || process.env.DOMAIN || 'localhost';
+    const phoneMap = new Map<string, string>();
+    for (const k of known) phoneMap.set(k.matrixUserId, k.phone);
     
-    const users: Array<{ user_id: string; display_name?: string; avatar_url?: string; phone?: string; lastSeen?: number }> = [];
+    // Get all users from Dendrite DB
+    const dbUsers = dbListAllUsers();
+    const presenceData = getPresenceData();
+    const devices = getDevices();
     
-    for (const u of known) {
-        const userId = u.matrixUserId.startsWith('@') ? u.matrixUserId : `@${u.matrixUserId}:${serverName}`;
-        let displayName = u.displayName;
-        let avatarUrl: string | undefined;
+    // Build presence map
+    const presenceMap = new Map<string, { presence: number; last_active_ts: number }>();
+    for (const p of presenceData) presenceMap.set(p.user_id, p);
+    
+    // Build device map (count + last seen)
+    const deviceMap = new Map<string, { count: number; last_seen_ts: number }>();
+    for (const d of devices) {
+        const existing = deviceMap.get(d.localpart) || { count: 0, last_seen_ts: 0 };
+        existing.count++;
+        if (d.last_seen_ts > existing.last_seen_ts) existing.last_seen_ts = d.last_seen_ts;
+        deviceMap.set(d.localpart, existing);
+    }
+    
+    // Online threshold: 5 minutes
+    const onlineThreshold = Date.now() - 5 * 60 * 1000;
+    
+    const users = dbUsers.map(u => {
+        const userId = `@${u.localpart}:${u.server_name || serverName}`;
+        const presence = presenceMap.get(userId);
+        const deviceInfo = deviceMap.get(u.localpart);
+        const phone = phoneMap.get(u.localpart) || '';
         
-        // Try to get profile from Matrix
-        if (token) {
-            try {
-                const profRes = await fetch(`${matrixBaseUrl}/_matrix/client/v3/profile/${encodeURIComponent(userId)}`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                });
-                if (profRes.ok) {
-                    const prof = (await profRes.json()) as { displayname?: string; avatar_url?: string };
-                    displayName = prof.displayname || displayName;
-                    avatarUrl = prof.avatar_url;
-                }
-            } catch { /* skip */ }
-        }
-        users.push({ user_id: userId, display_name: displayName, avatar_url: avatarUrl, phone: u.phone, lastSeen: u.lastSeen });
-    }
-    
-    // Also add piechat_admin if not in known list
-    if (token && !known.find(u => u.matrixUserId === ADMIN_USER)) {
-        users.push({ user_id: `@${ADMIN_USER}:${serverName}`, display_name: ADMIN_USER, phone: '(admin)' });
-    }
-    
-    res.json({ users });
+        // Determine online status
+        let isOnline = false;
+        if (presence && presence.presence === 1) isOnline = true;
+        if (deviceInfo && deviceInfo.last_seen_ts > onlineThreshold) isOnline = true;
+        
+        return {
+            user_id: userId,
+            localpart: u.localpart,
+            display_name: u.display_name || u.localpart,
+            avatar_url: u.avatar_url || '',
+            created_ts: u.created_ts,
+            is_deactivated: u.is_deactivated,
+            phone,
+            is_online: isOnline,
+            last_seen: deviceInfo?.last_seen_ts || presence?.last_active_ts || 0,
+            device_count: deviceInfo?.count || 0,
+        };
+    });
+
+    const onlineCount = users.filter(u => u.is_online).length;
+    res.json({ users, total: users.length, online: onlineCount });
 });
 
-// GET /auth/admin/rooms — list all rooms the admin has joined
+// GET /auth/admin/rooms — list ALL rooms from Dendrite database
 router.get('/admin/rooms', async (req: Request, res: Response) => {
     if (!isAdmin(req)) { res.status(403).json({ error: 'Unauthorized' }); return; }
-    const token = await getAdminToken();
-    if (!token) { res.status(500).json({ error: 'Cannot authenticate to Matrix' }); return; }
     
-    try {
-        const r = await fetch(`${matrixBaseUrl}/_matrix/client/v3/joined_rooms`, {
-            headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!r.ok) { res.json({ rooms: [] }); return; }
-        const data = (await r.json()) as { joined_rooms: string[] };
+    const dbRooms = dbListAllRooms();
+    const memberships = getRoomMemberships();
+    const token = await getAdminToken();
+    
+    // Count members per room
+    const memberCount = new Map<string, number>();
+    const memberList = new Map<string, string[]>();
+    for (const m of memberships) {
+        if (m.membership === 'join') {
+            memberCount.set(m.room_id, (memberCount.get(m.room_id) || 0) + 1);
+            const list = memberList.get(m.room_id) || [];
+            list.push(m.user_id);
+            memberList.set(m.room_id, list);
+        }
+    }
+    
+    // Get room details from Matrix API for display names
+    const rooms = [];
+    for (const room of dbRooms) {
+        let name = room.name || '';
+        let topic = room.topic || '';
+        let creator = room.creator || '';
         
-        const rooms: Array<{ room_id: string; name?: string; joined_members?: number; topic?: string; creator?: string }> = [];
-        for (const roomId of (data.joined_rooms || [])) {
+        if (token && !name) {
             try {
-                const stateRes = await fetch(`${matrixBaseUrl}/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/state`, {
+                const stateRes = await fetch(`${matrixBaseUrl}/_matrix/client/v3/rooms/${encodeURIComponent(room.room_id)}/state`, {
                     headers: { Authorization: `Bearer ${token}` },
                 });
-                let name = '';
-                let members = 0;
-                let topic = '';
-                let creator = '';
                 if (stateRes.ok) {
-                    const states = (await stateRes.json()) as Array<{ type: string; content: Record<string, unknown>; state_key?: string }>;
+                    const states = (await stateRes.json()) as Array<{ type: string; content: Record<string, unknown> }>;
                     for (const s of states) {
                         if (s.type === 'm.room.name') name = String(s.content?.name || '');
                         if (s.type === 'm.room.topic') topic = String(s.content?.topic || '');
                         if (s.type === 'm.room.create') creator = String(s.content?.creator || '');
-                        if (s.type === 'm.room.member' && s.content?.membership === 'join') members++;
                     }
                 }
-                rooms.push({ room_id: roomId, name, joined_members: members, topic, creator });
-            } catch {
-                rooms.push({ room_id: roomId });
-            }
+            } catch { /* skip */ }
         }
-        res.json({ rooms });
-    } catch {
-        res.json({ rooms: [] });
+        
+        rooms.push({
+            room_id: room.room_id,
+            name,
+            topic,
+            creator,
+            room_version: room.room_version,
+            joined_members: memberCount.get(room.room_id) || 0,
+            members: memberList.get(room.room_id) || [],
+            is_stub: room.is_stub,
+        });
     }
+    
+    res.json({ rooms, total: rooms.length });
+});
+
+// GET /auth/admin/dashboard — comprehensive overview
+router.get('/admin/dashboard', async (req: Request, res: Response) => {
+    if (!isAdmin(req)) { res.status(403).json({ error: 'Unauthorized' }); return; }
+    
+    const dbUsers = dbListAllUsers();
+    const dbRooms = dbListAllRooms();
+    const presenceData = getPresenceData();
+    const devices = getDevices();
+    const media = getMediaStats();
+    const memberships = getRoomMemberships();
+    
+    const onlineThreshold = Date.now() - 5 * 60 * 1000;
+    const deviceLastSeen = new Map<string, number>();
+    for (const d of devices) {
+        const ts = deviceLastSeen.get(d.localpart) || 0;
+        if (d.last_seen_ts > ts) deviceLastSeen.set(d.localpart, d.last_seen_ts);
+    }
+    
+    let onlineCount = 0;
+    for (const u of dbUsers) {
+        const userId = `@${u.localpart}:${process.env.DOMAIN || 'localhost'}`;
+        const p = presenceData.find(pp => pp.user_id === userId);
+        if (p && p.presence === 1) { onlineCount++; continue; }
+        const lastSeen = deviceLastSeen.get(u.localpart) || 0;
+        if (lastSeen > onlineThreshold) onlineCount++;
+    }
+    
+    const joinedMemberships = memberships.filter(m => m.membership === 'join');
+    
+    res.json({
+        users: { total: dbUsers.length, online: onlineCount, deactivated: dbUsers.filter(u => u.is_deactivated).length },
+        rooms: { total: dbRooms.length, active: dbRooms.filter(r => !r.is_stub).length },
+        devices: { total: devices.length },
+        media: { totalFiles: media.totalFiles, totalSize: media.totalSize },
+        memberships: { total: joinedMemberships.length },
+    });
 });
 
 // GET /auth/admin/docker-logs — read recent docker logs
