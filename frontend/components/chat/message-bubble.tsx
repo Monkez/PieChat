@@ -289,35 +289,81 @@ function ImageAttachment({ msg }: { msg: Message }) {
     return <FileAttachment msg={msg} isMe={false} />;
   }
 
+  const handleDownload = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!msg.fileUrl) return;
+    try {
+      const resp = await fetch(msg.fileUrl);
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = msg.fileName || 'image';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 100);
+    } catch { window.open(msg.fileUrl, '_blank'); }
+  };
+
   return (
-    <a
-      href={msg.fileUrl}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="block max-w-[300px] overflow-hidden rounded-lg"
-    >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={msg.fileUrl}
-        alt={msg.fileName || 'image'}
-        className="w-full h-auto rounded-lg object-cover max-h-[400px] transition-transform hover:scale-[1.02]"
-        onError={() => setLoadError(true)}
-      />
-    </a>
+    <div className="relative group/img max-w-[300px] overflow-hidden rounded-lg">
+      <a href={msg.fileUrl} target="_blank" rel="noopener noreferrer" className="block">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={msg.fileUrl}
+          alt={msg.fileName || 'image'}
+          className="w-full h-auto rounded-lg object-cover max-h-[400px] transition-transform hover:scale-[1.02]"
+          onError={() => setLoadError(true)}
+        />
+      </a>
+      <button
+        onClick={handleDownload}
+        className="absolute bottom-2 right-2 h-8 w-8 rounded-full bg-black/50 text-white flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity hover:bg-black/70 shadow-lg"
+        title="Tải xuống"
+      >
+        <Download className="h-4 w-4" />
+      </button>
+    </div>
   );
 }
 
 // ─── Video Attachment Sub-component ───────────────────
 function VideoAttachment({ msg }: { msg: Message }) {
   if (!msg.fileUrl) return null;
+
+  const handleDownload = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!msg.fileUrl) return;
+    try {
+      const resp = await fetch(msg.fileUrl);
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = msg.fileName || 'video';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 100);
+    } catch { window.open(msg.fileUrl, '_blank'); }
+  };
+
   return (
-    <div className="max-w-[300px] overflow-hidden rounded-lg">
+    <div className="relative group/vid max-w-[300px] overflow-hidden rounded-lg">
       <video
         src={msg.fileUrl}
         controls
         className="w-full h-auto rounded-lg max-h-[300px]"
         preload="metadata"
       />
+      <button
+        onClick={handleDownload}
+        className="absolute top-2 right-2 h-8 w-8 rounded-full bg-black/50 text-white flex items-center justify-center opacity-0 group-hover/vid:opacity-100 transition-opacity hover:bg-black/70 shadow-lg"
+        title="Tải xuống"
+      >
+        <Download className="h-4 w-4" />
+      </button>
     </div>
   );
 }
