@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { ArrowLeft, Users, MessageSquare, Server, Shield, Search, Trash2, UserPlus, RefreshCw, Key, Activity, HardDrive, AlertTriangle, CheckCircle, XCircle, Loader2, Copy, Eye } from 'lucide-react';
+import { ArrowLeft, Users, MessageSquare, Server, Shield, Search, Trash2, UserPlus, RefreshCw, Key, Activity, HardDrive, AlertTriangle, CheckCircle, XCircle, Loader2, Copy, Eye, Cpu, MemoryStick, Wifi, Phone } from 'lucide-react';
 import Link from 'next/link';
 import { getConfig, authUrl } from '@/lib/config';
 import { MobileBottomBar } from '@/components/mobile-bottom-bar';
@@ -42,6 +42,40 @@ interface OtpLogEntry {
 
 type TabId = 'overview' | 'users' | 'rooms' | 'logs';
 
+interface SystemInfo {
+  cpu: { model: string; cores: number; loadAvg: { '1m': number; '5m': number; '15m': number }; usagePercent: number };
+  memory: { total: number; used: number; free: number; usagePercent: number };
+  disk: string;
+  docker: string;
+  network: { interfaces: Array<{ name: string; address: string; family: string }>; traffic: string };
+  os: { platform: string; release: string; hostname: string; uptime: number; arch: string };
+}
+
+// Extract phone from Matrix userId like @u84111111:server -> +84111111
+function extractPhone(userId: string): string {
+  const match = userId.match(/@u(\d+):/);
+  if (match) {
+    const digits = match[1];
+    if (digits.startsWith('84')) return `+${digits}`;
+    return `+${digits}`;
+  }
+  return '—';
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+  if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + ' MB';
+  return (bytes / 1073741824).toFixed(2) + ' GB';
+}
+
+function formatUptime(seconds: number): string {
+  const d = Math.floor(seconds / 86400);
+  const h = Math.floor((seconds % 86400) / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  return d > 0 ? `${d}d ${h}h ${m}m` : h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
 export default function AdminPage() {
   const [activeTab, setActiveTab] = useState<TabId>('overview');
   const [accessToken, setAccessToken] = useState('');
@@ -49,6 +83,7 @@ export default function AdminPage() {
 
   // Overview state
   const [serverInfo, setServerInfo] = useState<Record<string, unknown> | null>(null);
+  const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
 
   // Users state
   const [users, setUsers] = useState<MatrixUser[]>([]);
@@ -104,6 +139,15 @@ export default function AdminPage() {
       const versions = versionRes.ok ? await versionRes.json() : null;
       const media = mediaRes.ok ? await mediaRes.json() : null;
       setServerInfo({ versions, media });
+    } catch { /* ignore */ }
+
+    // Load system info from auth service
+    try {
+      const sysRes = await fetch(authUrl('/admin/system-info?key=piechat-admin-dev'));
+      if (sysRes.ok) {
+        const data = (await sysRes.json()) as SystemInfo;
+        setSystemInfo(data);
+      }
     } catch { /* ignore */ }
   }, [matrixFetch]);
 
@@ -447,13 +491,87 @@ export default function AdminPage() {
               </div>
             </div>
 
+            {/* ─── System Monitor ─── */}
+            {systemInfo && (
+              <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 shadow-sm">
+                <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 mb-4 flex items-center gap-2">
+                  <Cpu className="h-4 w-4 text-sky-500" /> System Monitor
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* CPU */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-zinc-500 flex items-center gap-1"><Cpu className="h-3 w-3" /> CPU</span>
+                      <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">{systemInfo.cpu.usagePercent}%</span>
+                    </div>
+                    <div className="h-2 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full transition-all ${systemInfo.cpu.usagePercent > 80 ? 'bg-red-500' : systemInfo.cpu.usagePercent > 50 ? 'bg-amber-500' : 'bg-sky-500'}`} style={{ width: `${systemInfo.cpu.usagePercent}%` }} />
+                    </div>
+                    <p className="text-[10px] text-zinc-400">{systemInfo.cpu.model}</p>
+                    <p className="text-[10px] text-zinc-400">{systemInfo.cpu.cores} cores • Load: {systemInfo.cpu.loadAvg['1m'].toFixed(2)}</p>
+                  </div>
+
+                  {/* RAM */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-zinc-500 flex items-center gap-1"><MemoryStick className="h-3 w-3" /> RAM</span>
+                      <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">{systemInfo.memory.usagePercent}%</span>
+                    </div>
+                    <div className="h-2 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full transition-all ${systemInfo.memory.usagePercent > 85 ? 'bg-red-500' : systemInfo.memory.usagePercent > 60 ? 'bg-amber-500' : 'bg-violet-500'}`} style={{ width: `${systemInfo.memory.usagePercent}%` }} />
+                    </div>
+                    <p className="text-[10px] text-zinc-400">{formatBytes(systemInfo.memory.used)} / {formatBytes(systemInfo.memory.total)}</p>
+                    <p className="text-[10px] text-zinc-400">Free: {formatBytes(systemInfo.memory.free)}</p>
+                  </div>
+
+                  {/* Storage */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-zinc-500 flex items-center gap-1"><HardDrive className="h-3 w-3" /> Storage</span>
+                    </div>
+                    <pre className="text-[9px] text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-800 rounded-lg p-2 overflow-x-auto whitespace-pre">{systemInfo.disk || 'N/A'}</pre>
+                  </div>
+
+                  {/* Network */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-zinc-500 flex items-center gap-1"><Wifi className="h-3 w-3" /> Network</span>
+                    </div>
+                    <div className="space-y-1">
+                      {systemInfo.network.interfaces.map((iface, i) => (
+                        <div key={i} className="text-[10px] text-zinc-500">
+                          <span className="font-medium">{iface.name}</span>: <span className="font-mono">{iface.address}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Docker Stats */}
+                {systemInfo.docker && (
+                  <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+                    <h4 className="text-xs font-bold text-zinc-600 dark:text-zinc-400 mb-2">🐳 Docker Containers</h4>
+                    <pre className="text-[10px] text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-800 rounded-lg p-2 overflow-x-auto">{systemInfo.docker}</pre>
+                  </div>
+                )}
+
+                {/* OS Info */}
+                <div className="mt-3 flex flex-wrap gap-3 text-[10px] text-zinc-400">
+                  <span>💻 {systemInfo.os.hostname}</span>
+                  <span>🛡️ {systemInfo.os.platform} {systemInfo.os.arch}</span>
+                  <span>⏱️ Uptime: {formatUptime(systemInfo.os.uptime)}</span>
+                  <span>🏛️ Kernel: {systemInfo.os.release}</span>
+                </div>
+              </div>
+            )}
+
             {/* Server Info */}
             {serverInfo && (
               <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 shadow-sm">
                 <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 mb-3 flex items-center gap-2">
-                  <Server className="h-4 w-4 text-zinc-400" /> Thông tin Server
+                  <Server className="h-4 w-4 text-zinc-400" /> Matrix Server Info
                 </h3>
-                <pre className="text-xs text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-800 rounded-xl p-3 overflow-x-auto max-h-[300px] overflow-y-auto">
+                <pre className="text-xs text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-800 rounded-xl p-3 overflow-x-auto max-h-[200px] overflow-y-auto">
                   {JSON.stringify(serverInfo, null, 2)}
                 </pre>
               </div>
@@ -538,20 +656,34 @@ export default function AdminPage() {
                     <thead className="bg-zinc-50 dark:bg-zinc-800/50 sticky top-0">
                       <tr>
                         <th className="text-left px-4 py-2 text-[11px] uppercase tracking-wider text-zinc-400 font-semibold">User ID</th>
-                        <th className="text-left px-4 py-2 text-[11px] uppercase tracking-wider text-zinc-400 font-semibold hidden sm:table-cell">Tên hiển thị</th>
-                        <th className="text-left px-4 py-2 text-[11px] uppercase tracking-wider text-zinc-400 font-semibold hidden md:table-cell">Ngày tạo</th>
+                        <th className="text-left px-4 py-2 text-[11px] uppercase tracking-wider text-zinc-400 font-semibold hidden sm:table-cell">Tên</th>
+                        <th className="text-left px-4 py-2 text-[11px] uppercase tracking-wider text-zinc-400 font-semibold">SĐT</th>
+                        <th className="text-left px-4 py-2 text-[11px] uppercase tracking-wider text-zinc-400 font-semibold hidden md:table-cell">Mật khẩu</th>
                         <th className="text-right px-4 py-2 text-[11px] uppercase tracking-wider text-zinc-400 font-semibold">Thao tác</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                      {filteredUsers.map((user) => (
+                      {filteredUsers.map((user) => {
+                        const phone = extractPhone(user.name);
+                        return (
                         <tr key={user.name} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors">
                           <td className="px-4 py-3">
                             <p className="font-mono text-xs text-zinc-700 dark:text-zinc-300">{user.name}</p>
                           </td>
-                          <td className="px-4 py-3 hidden sm:table-cell text-zinc-500">{user.displayname || '—'}</td>
-                          <td className="px-4 py-3 hidden md:table-cell text-[11px] text-zinc-400">
-                            {user.creation_ts ? new Date(user.creation_ts * 1000).toLocaleDateString() : '—'}
+                          <td className="px-4 py-3 hidden sm:table-cell text-xs text-zinc-500">{user.displayname || '—'}</td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-1">
+                              <Phone className="h-3 w-3 text-zinc-400" />
+                              <span className="font-mono text-xs text-emerald-600 dark:text-emerald-400">{phone}</span>
+                              {phone !== '—' && (
+                                <button onClick={() => { navigator.clipboard.writeText(phone); showNotice('success', 'Đã copy SĐT'); }} className="text-zinc-400 hover:text-zinc-600">
+                                  <Copy className="h-3 w-3" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 hidden md:table-cell">
+                            <span className="font-mono text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-1.5 py-0.5 rounded">12345678</span>
                           </td>
                           <td className="px-4 py-3 text-right">
                             <div className="flex items-center justify-end gap-1">
@@ -572,7 +704,8 @@ export default function AdminPage() {
                             </div>
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 )}

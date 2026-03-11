@@ -441,6 +441,93 @@ router.get('/admin/docker-logs', async (req: Request, res: Response) => {
     }
 });
 
+// GET /auth/admin/system-info — server system metrics (CPU, RAM, Disk, Network)
+router.get('/admin/system-info', async (req: Request, res: Response) => {
+    if (!isAdmin(req)) { res.status(403).json({ error: 'Unauthorized' }); return; }
+    
+    const os = await import('os');
+    const cpus = os.cpus();
+    const totalMem = os.totalmem();
+    const freeMem = os.freemem();
+    const usedMem = totalMem - freeMem;
+    const loadAvg = os.loadavg();
+    
+    // Calculate CPU usage percentage
+    let cpuUsagePercent = 0;
+    if (cpus.length > 0) {
+        const cpuTotal = cpus.reduce((acc, cpu) => {
+            const times = cpu.times;
+            return acc + times.user + times.nice + times.sys + times.idle + times.irq;
+        }, 0);
+        const cpuIdle = cpus.reduce((acc, cpu) => acc + cpu.times.idle, 0);
+        cpuUsagePercent = Math.round(((cpuTotal - cpuIdle) / cpuTotal) * 100);
+    }
+
+    // Network interfaces
+    const nets = os.networkInterfaces();
+    const networkInfo: Array<{ name: string; address: string; family: string }> = [];
+    for (const [name, addrs] of Object.entries(nets)) {
+        for (const addr of (addrs || [])) {
+            if (!addr.internal) {
+                networkInfo.push({ name, address: addr.address, family: addr.family || 'IPv4' });
+            }
+        }
+    }
+
+    // Disk usage via shell
+    let diskInfo = '';
+    let dockerInfo = '';
+    let networkTraffic = '';
+    try {
+        const { exec } = await import('child_process');
+        const { promisify } = await import('util');
+        const execAsync = promisify(exec);
+        
+        try {
+            const { stdout } = await execAsync('df -h / /opt 2>/dev/null || df -h /', { timeout: 5000 });
+            diskInfo = stdout;
+        } catch { /* skip */ }
+        
+        try {
+            const { stdout } = await execAsync('docker stats --no-stream --format "{{.Name}}: CPU {{.CPUPerc}}, MEM {{.MemUsage}}" 2>/dev/null', { timeout: 10000 });
+            dockerInfo = stdout;
+        } catch { /* skip */ }
+        
+        try {
+            const { stdout } = await execAsync('cat /proc/net/dev 2>/dev/null | tail -n +3', { timeout: 3000 });
+            networkTraffic = stdout;
+        } catch { /* skip */ }
+    } catch { /* not on Linux */ }
+
+    res.json({
+        cpu: {
+            model: cpus[0]?.model || 'Unknown',
+            cores: cpus.length,
+            loadAvg: { '1m': loadAvg[0], '5m': loadAvg[1], '15m': loadAvg[2] },
+            usagePercent: cpuUsagePercent,
+        },
+        memory: {
+            total: totalMem,
+            used: usedMem,
+            free: freeMem,
+            usagePercent: Math.round((usedMem / totalMem) * 100),
+        },
+        disk: diskInfo,
+        docker: dockerInfo,
+        network: {
+            interfaces: networkInfo,
+            traffic: networkTraffic,
+        },
+        os: {
+            platform: os.platform(),
+            release: os.release(),
+            hostname: os.hostname(),
+            uptime: os.uptime(),
+            arch: os.arch(),
+        },
+    });
+});
+
 // ─── Health check ───────────────────────────────────────
 
 router.get('/health', (_req: Request, res: Response) => {
