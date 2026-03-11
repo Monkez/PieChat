@@ -9,6 +9,7 @@ interface UiState {
   globalSearch: string;
   friends: Array<{ phone: string; displayName: string; userId?: string }>;
   pinnedRoomIds: string[];
+  mutedRoomIds: string[];
   friendRequests: Array<{ phone: string; displayName: string }>;
   sentFriendRequests: string[];
   setLanguage: (language: Language) => void;
@@ -19,15 +20,18 @@ interface UiState {
   removeFriend: (phone: string) => void;
   acceptFriendRequest: (phone: string) => void;
   togglePinRoom: (roomId: string) => void;
+  toggleMuteRoom: (roomId: string) => void;
+  isRoomMuted: (roomId: string) => boolean;
 }
 
 export const useUiStore = create<UiState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       language: 'vi',
       globalSearch: '',
       friends: [],
       pinnedRoomIds: [],
+      mutedRoomIds: [],
       friendRequests: [],
       sentFriendRequests: [],
       setLanguage: (language) => set({ language }),
@@ -114,6 +118,21 @@ export const useUiStore = create<UiState>()(
             pinnedRoomIds: [...state.pinnedRoomIds, roomId],
           };
         }),
+      toggleMuteRoom: (roomId) =>
+        set((state) => {
+          const isMuted = state.mutedRoomIds.includes(roomId);
+          if (isMuted) {
+            return {
+              mutedRoomIds: state.mutedRoomIds.filter((id) => id !== roomId),
+            };
+          }
+          return {
+            mutedRoomIds: [...state.mutedRoomIds, roomId],
+          };
+        }),
+      isRoomMuted: (roomId: string): boolean => {
+        return get().mutedRoomIds.includes(roomId);
+      },
     }),
     {
       name: 'piechat-ui-store',

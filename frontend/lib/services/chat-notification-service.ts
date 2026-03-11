@@ -299,10 +299,12 @@ export function notifyNewMessages(
   activeRoomId: string | null,
   resolveUserName: (userId: string) => string,
   resolveRoomName: (roomId: string) => string,
+  mutedRoomIds?: string[],
 ): void {
   if (typeof window === 'undefined') return;
 
   const canUseBrowserNotif = 'Notification' in window && Notification.permission === 'granted';
+  const mutedSet = new Set(mutedRoomIds || []);
 
   for (const msg of newMessages) {
     // Skip own messages
@@ -323,6 +325,9 @@ export function notifyNewMessages(
 
     // Only notify if tab is not focused OR message is from different room
     if (isDocumentVisible() && msg.roomId === activeRoomId) continue;
+
+    // Skip notifications for muted rooms
+    if (mutedSet.has(msg.roomId)) continue;
 
     const senderName = resolveUserName(msg.senderId);
     const roomName = resolveRoomName(msg.roomId);

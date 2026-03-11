@@ -36,7 +36,9 @@ import {
   ChevronRight,
   ChevronDown,
   Camera,
-  CheckCircle
+  CheckCircle,
+  BellOff,
+  Bell
 } from 'lucide-react';
 import { useMatrixStore } from '@/lib/store/matrix-store';
 import { usePathname, useRouter } from 'next/navigation';
@@ -123,7 +125,7 @@ export default function ChatLayout({
     selectRoom,
     error,
   } = useMatrixStore();
-  const { language, globalSearch, setGlobalSearch, friends: localFriends, addFriend: addLocalFriend, removeFriend: removeLocalFriend, pinnedRoomIds, togglePinRoom, friendRequests: localRequests, acceptFriendRequest: acceptLocalRequest, sentFriendRequests: localSentRequests, sendFriendRequest: sendLocalRequest } = useUiStore();
+  const { language, globalSearch, setGlobalSearch, friends: localFriends, addFriend: addLocalFriend, removeFriend: removeLocalFriend, pinnedRoomIds, togglePinRoom, mutedRoomIds, toggleMuteRoom, friendRequests: localRequests, acceptFriendRequest: acceptLocalRequest, sentFriendRequests: localSentRequests, sendFriendRequest: sendLocalRequest } = useUiStore();
 
   const [isMessageRequestsOpen, setIsMessageRequestsOpen] = useState(false);
   const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
@@ -1289,11 +1291,19 @@ export default function ChatLayout({
                           )}
                         </span>
                         <div className="flex items-center gap-1 shrink-0">
+                          {mutedRoomIds.includes(room.id) && (
+                            <BellOff className="h-3 w-3 text-zinc-400" />
+                          )}
                           {pinnedRoomIds.includes(room.id) && (
                             <Pin className="h-3 w-3 text-sky-500" />
                           )}
-                          {room.unreadCount > 0 && (
+                          {room.unreadCount > 0 && !mutedRoomIds.includes(room.id) && (
                             <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                              {room.unreadCount}
+                            </span>
+                          )}
+                          {room.unreadCount > 0 && mutedRoomIds.includes(room.id) && (
+                            <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-zinc-400 px-1 text-[10px] font-bold text-white">
                               {room.unreadCount}
                             </span>
                           )}
@@ -1353,21 +1363,38 @@ export default function ChatLayout({
                     </div>
                   </div>
 
-                  <button
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      togglePinRoom(room.id);
-                    }}
-                    className="absolute right-2 bottom-2 hidden group-hover:flex h-7 w-7 items-center justify-center rounded-full bg-white/90 shadow-sm hover:bg-white dark:bg-zinc-800/90 dark:hover:bg-zinc-800 text-zinc-400 hover:text-sky-500 transition-all border border-zinc-100 dark:border-zinc-800"
-                    title={pinnedRoomIds.includes(room.id) ? t(language, 'chatUnpin') : t(language, 'chatPin')}
-                  >
-                    {pinnedRoomIds.includes(room.id) ? (
-                      <PinOff className="h-3.5 w-3.5 text-sky-500" />
-                    ) : (
-                      <Pin className="h-3.5 w-3.5" />
-                    )}
-                  </button>
+                  <div className="absolute right-2 bottom-2 hidden group-hover:flex items-center gap-1">
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        toggleMuteRoom(room.id);
+                      }}
+                      className="flex h-7 w-7 items-center justify-center rounded-full bg-white/90 shadow-sm hover:bg-white dark:bg-zinc-800/90 dark:hover:bg-zinc-800 text-zinc-400 hover:text-amber-500 transition-all border border-zinc-100 dark:border-zinc-800"
+                      title={mutedRoomIds.includes(room.id) ? 'Bỏ tắt tiếng' : 'Tắt tiếng'}
+                    >
+                      {mutedRoomIds.includes(room.id) ? (
+                        <Bell className="h-3.5 w-3.5 text-amber-500" />
+                      ) : (
+                        <BellOff className="h-3.5 w-3.5" />
+                      )}
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        togglePinRoom(room.id);
+                      }}
+                      className="flex h-7 w-7 items-center justify-center rounded-full bg-white/90 shadow-sm hover:bg-white dark:bg-zinc-800/90 dark:hover:bg-zinc-800 text-zinc-400 hover:text-sky-500 transition-all border border-zinc-100 dark:border-zinc-800"
+                      title={pinnedRoomIds.includes(room.id) ? t(language, 'chatUnpin') : t(language, 'chatPin')}
+                    >
+                      {pinnedRoomIds.includes(room.id) ? (
+                        <PinOff className="h-3.5 w-3.5 text-sky-500" />
+                      ) : (
+                        <Pin className="h-3.5 w-3.5" />
+                      )}
+                    </button>
+                  </div>
                 </div>
               ))}
 

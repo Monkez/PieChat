@@ -397,6 +397,177 @@ router.post('/qr/approve', async (req: Request, res: Response) => {
     }
 });
 
+// ─── POST /auth/register — Public user registration ──────
+router.post('/register', async (req: Request, res: Response) => {
+    const { phone: rawPhone, password } = req.body as { phone?: string; password?: string };
+    const phone = normalizePhone(String(rawPhone || ''));
+    const pwd = String(password || '');
+
+    if (!phone || phone.length < 8) {
+        res.status(400).json({ error: 'Số điện thoại không hợp lệ' });
+        return;
+    }
+    if (!pwd || pwd.length < 6) {
+        res.status(400).json({ error: 'Mật khẩu phải ít nhất 6 ký tự' });
+        return;
+    }
+
+    const serverName = process.env.DOMAIN || 'localhost';
+    const matrixUsername = `vn_${phone}`;
+
+    try {
+        // Check if user already exists by trying to login
+        const loginCheck = await fetch(`${matrixBaseUrl}/_matrix/client/v3/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                type: 'm.login.password',
+                identifier: { type: 'm.id.user', user: matrixUsername },
+                password: pwd,
+            }),
+        });
+        if (loginCheck.ok) {
+            res.status(409).json({ error: 'Số điện thoại đã được đăng ký' });
+            return;
+        }
+
+        // Register via Dendrite registration endpoint
+        const sharedSecret = process.env.REGISTRATION_SHARED_SECRET;
+        if (sharedSecret) {
+            // Use shared secret registration (Synapse/Dendrite admin API)
+            const crypto = await import('crypto');
+            const nonceRes = await fetch(`${matrixBaseUrl}/_synapse/admin/v1/register`);
+            if (!nonceRes.ok) {
+                res.status(500).json({ error: 'Không thể kết nối server Matrix' });
+                return;
+            }
+            const { nonce } = (await nonceRes.json()) as { nonce: string };
+            const mac = crypto.createHmac('sha1', sharedSecret);
+            mac.update(nonce + '\0' + matrixUsername + '\0' + pwd + '\0notadmin');
+            const hmac = mac.digest('hex');
+
+            const regRes = await fetch(`${matrixBaseUrl}/_synapse/admin/v1/register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nonce, username: matrixUsername, password: pwd, admin: false, mac: hmac }),
+            });
+            const regData = (await regRes.json()) as { access_token?: string; user_id?: string; errcode?: string; error?: string };
+
+            if (regData.errcode === 'M_USER_IN_USE') {
+                res.status(409).json({ error: 'Số điện thoại đã được đăng ký' });
+                return;
+            }
+            if (!regData.access_token) {
+                console.error('[Register] Failed:', regData);
+                res.status(500).json({ error: regData.error || 'Đăng ký thất bại' });
+                return;
+            }
+
+            // Track the known user
+            trackKnownUser(phone, matrixUsername, `@${matrixUsername}:${serverName}`);
+
+            res.json({
+                success: true,
+                userId: regData.user_id,
+                message: 'Đăng ký thành công! Bạn có thể đăng nhập ngay.',
+            });
+        } else {
+            // Fallback: direct Matrix register with dummy auth
+            const regRes = await fetch(`${matrixBaseUrl}/_matrix/client/v3/register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    username: matrixUsername,
+                    password: pwd,
+                    auth: { type: 'm.login.dummy' },
+                }),
+            });
+            const regData = (await regRes.json()) as { access_token?: string; user_id?: string; errcode?: string; error?: string };
+
+            if (regData.errcode === 'M_USER_IN_USE') {
+                res.status(409).json({ error: 'Số điện thoại đã được đăng ký' });
+                return;
+            }
+            if (regData.errcode === 'M_FORBIDDEN') {
+                res.status(403).json({ error: 'Server không cho phép đăng ký công khai. Liên hệ admin.' });
+                return;
+            }
+            if (!regData.access_token) {
+                res.status(500).json({ error: regData.error || 'Đăng ký thất bại' });
+                return;
+            }
+
+            trackKnownUser(phone, matrixUsername, `@${matrixUsername}:${serverName}`);
+
+            res.json({
+                success: true,
+                userId: regData.user_id,
+                message: 'Đăng ký thành công! Bạn có thể đăng nhập ngay.',
+            });
+        }
+    } catch (err) {
+        console.error('[Register] Error:', err);
+        res.status(500).json({ error: 'Lỗi server, vui lòng thử lại sau' });
+    }
+});
+
+// ─── GET /auth/link-preview — Fetch URL metadata ─────────
+router.get('/link-preview', async (req: Request, res: Response) => {
+    const url = String(req.query.url || '');
+    if (!url || !url.startsWith('http')) {
+        res.status(400).json({ error: 'Invalid URL' });
+        return;
+    }
+    try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000);
+        const response = await fetch(url, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (compatible; PieChatBot/1.0)',
+                'Accept': 'text/html',
+            },
+            signal: controller.signal,
+            redirect: 'follow',
+        });
+        clearTimeout(timeout);
+
+        if (!response.ok) {
+            res.json({ url, title: new URL(url).hostname });
+            return;
+        }
+
+        // Only read first 50KB for metadata
+        const text = await response.text();
+        const html = text.slice(0, 50000);
+
+        const getMetaContent = (property: string): string | undefined => {
+            // og:property
+            const ogMatch = html.match(new RegExp(`<meta[^>]+(?:property|name)=["']${property}["'][^>]+content=["']([^"']+)["']`, 'i'))
+                || html.match(new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']${property}["']`, 'i'));
+            return ogMatch?.[1];
+        };
+
+        const title = getMetaContent('og:title')
+            || html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]
+            || new URL(url).hostname;
+        const description = getMetaContent('og:description')
+            || getMetaContent('description');
+        const image = getMetaContent('og:image');
+        const siteName = getMetaContent('og:site_name')
+            || new URL(url).hostname.replace('www.', '');
+
+        res.json({
+            url,
+            title: title?.trim().slice(0, 200),
+            description: description?.trim().slice(0, 300),
+            image,
+            siteName: siteName?.trim(),
+        });
+    } catch {
+        res.json({ url, title: new URL(url).hostname.replace('www.', '') });
+    }
+});
+
 // ─── Admin API Endpoints ────────────────────────────────
 
 // Simple admin key check (use ADMIN_SECRET env or default dev key)

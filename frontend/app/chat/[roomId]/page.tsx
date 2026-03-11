@@ -4,7 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Send, Paperclip, MoreVertical, Phone, Video, Search, UserPlus, Crown, ShieldCheck, Trash2, Users, GripVertical, Shield, MessageSquare, Plus, ArrowLeft, FolderOpen, X, Check } from 'lucide-react';
+import { Send, Paperclip, MoreVertical, Phone, Video, Search, UserPlus, Crown, ShieldCheck, Trash2, Users, GripVertical, Shield, MessageSquare, Plus, ArrowLeft, FolderOpen, X, Check, BellOff, Bell } from 'lucide-react';
 import { MessageBubble } from '@/components/chat/message-bubble';
 import { ChatInput, type ReplyEditState } from '@/components/chat/chat-input';
 import { MediaGallery } from '@/components/chat/media-gallery';
@@ -57,7 +57,7 @@ export default function RoomPage() {
     sendFriendRequest,
     createDirectChatByUserId,
   } = useMatrixStore();
-  const { language } = useUiStore();
+  const { language, toggleMuteRoom, mutedRoomIds } = useUiStore();
   const [messages, setMessages] = useState<Message[]>([]);
   const [pollVotes, setPollVotes] = useState<Record<string, PollVote[]>>({});
   const [isPollDialogOpen, setIsPollDialogOpen] = useState(false);
@@ -214,6 +214,7 @@ export default function RoomPage() {
             return member?.displayName || member?.username || userId;
           },
           () => room?.name || 'PieChat',
+          useUiStore.getState().mutedRoomIds,
         );
 
         // Detect incoming calls
@@ -1109,6 +1110,25 @@ export default function RoomPage() {
                   >
                     <FolderOpen className="h-4 w-4" />
                     Kho lưu trữ
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      toggleMuteRoom(roomId);
+                    }}
+                    className="flex w-full items-center gap-2 px-4 py-2 text-sm text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-700/50"
+                  >
+                    {mutedRoomIds.includes(roomId) ? (
+                      <>
+                        <Bell className="h-4 w-4 text-amber-500" />
+                        Bỏ tắt tiếng
+                      </>
+                    ) : (
+                      <>
+                        <BellOff className="h-4 w-4" />
+                        Tắt tiếng
+                      </>
+                    )}
                   </button>
                   {(canManageGroup || canManageChannel) && (
                     <button
