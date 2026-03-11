@@ -43,7 +43,8 @@
 - **Typing indicator** — hiển thị khi đối phương đang gõ
 - **Đọc/chưa đọc** — badge unread count chính xác
 - **Reply/Edit/Delete** — trả lời, sửa, xóa tin nhắn
-- **Forward** — chuyển tiếp tin nhắn sang phòng khác
+- **Forward** — chuyển tiếp tin nhắn sang phòng khác hoặc tạo nhóm mới trong kênh
+- **Drag & Drop** — kéo thả file/folder vào chat, preview + tuỳ chọn caption
 - **Pin conversations** — ghim hội thoại quan trọng
 - **Tìm kiếm người dùng** theo số điện thoại
 
