@@ -42,6 +42,8 @@
 - **Stickers & Emoji Reactions** — bộ sticker tuỳ chỉnh
 - **Typing indicator** — hiển thị khi đối phương đang gõ
 - **Đọc/chưa đọc** — badge unread count chính xác
+- **Reply/Edit/Delete** — trả lời, sửa, xóa tin nhắn
+- **Forward** — chuyển tiếp tin nhắn sang phòng khác
 - **Pin conversations** — ghim hội thoại quan trọng
 - **Tìm kiếm người dùng** theo số điện thoại
 
