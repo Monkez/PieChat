@@ -4,7 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Send, Paperclip, MoreVertical, Phone, Video, Search, UserPlus, Crown, ShieldCheck, Trash2, Users, GripVertical, Shield, MessageSquare, Plus, ArrowLeft, FolderOpen, X, Check, BellOff, Bell } from 'lucide-react';
+import { Send, Paperclip, MoreVertical, Phone, Video, Search, UserPlus, Crown, ShieldCheck, Trash2, Users, GripVertical, Shield, MessageSquare, Plus, ArrowLeft, FolderOpen, X, Check, BellOff, Bell, LogOut, Ban, Pin, Copy, Download, Eraser } from 'lucide-react';
 import { MessageBubble } from '@/components/chat/message-bubble';
 import { ChatInput, type ReplyEditState } from '@/components/chat/chat-input';
 import { MediaGallery } from '@/components/chat/media-gallery';
@@ -32,6 +32,7 @@ export default function RoomPage() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
   const [activeMenuMessageId, setActiveMenuMessageId] = useState<string | null>(null);
+  const [pinnedMessage, setPinnedMessage] = useState<Message | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const userScrolledUpRef = useRef(false);
@@ -801,6 +802,8 @@ export default function RoomPage() {
       }
     } else if (action === 'forward') {
       setForwardingMessage(msg);
+    } else if (action === 'pin') {
+      setPinnedMessage(prev => prev?.id === msg.id ? null : msg);
     }
   };
 
@@ -1176,6 +1179,69 @@ export default function RoomPage() {
                       {t(language, 'chatJoin')}
                     </button>
                   )}
+                  {/* Export Chat History */}
+                  <button
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      const exportData = {
+                        roomId,
+                        roomName: room?.name || roomId,
+                        exportedAt: new Date().toISOString(),
+                        messageCount: messages.length,
+                        messages: messages.map(m => ({
+                          id: m.id,
+                          sender: m.senderId,
+                          content: m.content,
+                          timestamp: new Date(m.timestamp).toISOString(),
+                          type: m.msgtype || 'm.text',
+                          ...(m.fileName ? { fileName: m.fileName } : {}),
+                        })),
+                      };
+                      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `chat-${(room?.name || roomId).replace(/[^a-zA-Z0-9]/g, '_')}-${new Date().toISOString().slice(0, 10)}.json`;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    }}
+                    className="flex w-full items-center gap-2 px-4 py-2 text-sm text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                  >
+                    <Download className="h-4 w-4" />
+                    Xuất lịch sử chat
+                  </button>
+                  {/* Clear Chat History */}
+                  <button
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      if (!confirm('Xóa toàn bộ lịch sử chat hiển thị? (Chỉ xóa trên thiết bị này)')) return;
+                      setMessages([]);
+                    }}
+                    className="flex w-full items-center gap-2 px-4 py-2 text-sm text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-900/20"
+                  >
+                    <Eraser className="h-4 w-4" />
+                    Xóa lịch sử chat
+                  </button>
+                  {/* Leave Room */}
+                  {room?.type !== 'dm' && (
+                    <button
+                      onClick={async () => {
+                        setIsMenuOpen(false);
+                        if (!confirm('Bạn có chắc muốn rời khỏi phòng này?')) return;
+                        try {
+                          await matrixService.leaveRoom(roomId);
+                          await fetchRooms();
+                          router.push('/chat');
+                        } catch (err) {
+                          console.error('Leave room failed:', err);
+                        }
+                      }}
+                      className="flex w-full items-center gap-2 px-4 py-2 text-sm text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-900/20"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      Rời phòng
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -1194,6 +1260,19 @@ export default function RoomPage() {
             </div>
           )
         }
+        {/* Pinned Message Banner */}
+        {pinnedMessage && (
+          <div className="flex items-center gap-2 border-t border-orange-100 dark:border-orange-900/30 bg-orange-50/50 dark:bg-orange-900/10 px-4 py-2">
+            <Pin className="h-4 w-4 text-orange-500 shrink-0" />
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-semibold text-orange-600 dark:text-orange-400">Tin nhắn đã ghim</p>
+              <p className="text-xs text-zinc-600 dark:text-zinc-400 truncate">{pinnedMessage.content}</p>
+            </div>
+            <button onClick={() => setPinnedMessage(null)} className="shrink-0 rounded-full p-1 hover:bg-orange-100 dark:hover:bg-orange-900/20">
+              <X className="h-3.5 w-3.5 text-orange-400" />
+            </button>
+          </div>
+        )}
         {
           room?.type === 'channel' && (
             <div className="flex items-center justify-between border-t border-sky-100 py-3 dark:border-sky-900/30">

@@ -249,6 +249,9 @@ export default function ProfilePage() {
             <p className="mt-1.5 text-sm text-zinc-600 dark:text-zinc-400 font-mono">{currentUser?.id || '@guest'}</p>
           </div>
 
+          {/* Custom Status */}
+          <CustomStatusSection />
+
           {/* Phone with visibility toggle */}
           <div className="px-5 py-4 border-b border-zinc-100 dark:border-zinc-800">
             <div className="flex items-center justify-between">
@@ -389,6 +392,101 @@ export default function ProfilePage() {
       )}
 
       <MobileBottomBar />
+    </div>
+  );
+}
+
+const STATUS_PRESETS = [
+  { emoji: '💼', label: 'Đang làm việc' },
+  { emoji: '🏢', label: 'Đang họp' },
+  { emoji: '✈️', label: 'Nghỉ phép' },
+  { emoji: '🔴', label: 'Không làm phiền' },
+  { emoji: '🍜', label: 'Đang ăn' },
+  { emoji: '🏠', label: 'Làm việc tại nhà' },
+  { emoji: '🎉', label: 'Đang rảnh' },
+];
+
+function CustomStatusSection() {
+  const [statusText, setStatusText] = useState('');
+  const [isEditing, setIsEditing] = useState(false);
+  const [savedStatus, setSavedStatus] = useState('');
+
+  useEffect(() => {
+    const stored = localStorage.getItem('piechat_custom_status');
+    if (stored) {
+      setSavedStatus(stored);
+      setStatusText(stored);
+    }
+  }, []);
+
+  const saveStatus = async (text: string) => {
+    setSavedStatus(text);
+    setStatusText(text);
+    localStorage.setItem('piechat_custom_status', text);
+    setIsEditing(false);
+    try {
+      await matrixService.setPresence('online', text);
+    } catch { /* ignore */ }
+  };
+
+  const clearStatus = async () => {
+    setSavedStatus('');
+    setStatusText('');
+    localStorage.removeItem('piechat_custom_status');
+    setIsEditing(false);
+    try {
+      await matrixService.setPresence('online', '');
+    } catch { /* ignore */ }
+  };
+
+  return (
+    <div className="px-5 py-4 border-b border-zinc-100 dark:border-zinc-800">
+      <label className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Trạng thái</label>
+      {isEditing ? (
+        <div className="mt-2 space-y-2">
+          <div className="flex flex-wrap gap-1.5">
+            {STATUS_PRESETS.map((p) => (
+              <button
+                key={p.label}
+                onClick={() => saveStatus(`${p.emoji} ${p.label}`)}
+                className="rounded-full border border-zinc-200 dark:border-zinc-700 px-2.5 py-1 text-xs font-medium hover:bg-sky-50 dark:hover:bg-sky-900/20 transition-colors"
+              >
+                {p.emoji} {p.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={statusText}
+              onChange={(e) => setStatusText(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') saveStatus(statusText); }}
+              maxLength={100}
+              className="flex-1 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-sky-500"
+              placeholder="Nhập trạng thái..."
+              autoFocus
+            />
+            <button onClick={() => saveStatus(statusText)}
+              className="rounded-lg bg-sky-500 px-3 py-2 text-xs font-bold text-white hover:bg-sky-600">Lưu</button>
+            <button onClick={() => { setIsEditing(false); setStatusText(savedStatus); }}
+              className="rounded-lg px-3 py-2 text-xs font-medium text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800">Hủy</button>
+          </div>
+          {savedStatus && (
+            <button onClick={clearStatus} className="text-xs text-rose-500 hover:text-rose-600">Xóa trạng thái</button>
+          )}
+        </div>
+      ) : (
+        <button onClick={() => setIsEditing(true)} className="mt-1.5 w-full text-left group">
+          {savedStatus ? (
+            <p className="text-sm text-zinc-700 dark:text-zinc-300">
+              {savedStatus}
+              <Pencil className="inline h-3 w-3 ml-1.5 text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+            </p>
+          ) : (
+            <p className="text-sm text-zinc-400 italic hover:text-zinc-500">Đặt trạng thái... ✏️</p>
+          )}
+        </button>
+      )}
     </div>
   );
 }

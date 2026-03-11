@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Bell, Shield, Moon, ArrowLeft } from 'lucide-react';
+import { Bell, Shield, Moon, ArrowLeft, Lock, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { useTheme } from 'next-themes';
 import { useUiStore } from '@/lib/store/ui-store';
@@ -165,6 +165,9 @@ export default function SettingsPage() {
             </div>
           </div>
 
+          {/* Change Password Section */}
+          <ChangePasswordCard loginPhone={loginPhone} />
+
           {/* Security Section */}
           <div className="overflow-hidden rounded-lg bg-white shadow dark:bg-zinc-900 dark:border dark:border-zinc-800">
             <div className="px-4 py-5 sm:px-6">
@@ -262,6 +265,80 @@ export default function SettingsPage() {
         </div>
       </div>
       <MobileBottomBar />
+    </div>
+  );
+}
+
+function ChangePasswordCard({ loginPhone }: { loginPhone: string }) {
+  const [oldPassword, setOldPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [notice, setNotice] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!loginPhone) { setNotice({ text: 'Chưa đăng nhập', type: 'error' }); return; }
+    if (newPassword.length < 6) { setNotice({ text: 'Mật khẩu mới phải ít nhất 6 ký tự', type: 'error' }); return; }
+    if (newPassword !== confirmPassword) { setNotice({ text: 'Mật khẩu xác nhận không khớp', type: 'error' }); return; }
+
+    setLoading(true);
+    setNotice(null);
+    try {
+      const res = await fetch(authUrl('/change-password'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: loginPhone, oldPassword, newPassword }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setNotice({ text: data.message || 'Đổi mật khẩu thành công!', type: 'success' });
+        setOldPassword(''); setNewPassword(''); setConfirmPassword('');
+      } else {
+        setNotice({ text: data.error || 'Đổi mật khẩu thất bại', type: 'error' });
+      }
+    } catch {
+      setNotice({ text: 'Lỗi kết nối server', type: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="overflow-hidden rounded-lg bg-white shadow dark:bg-zinc-900 dark:border dark:border-zinc-800">
+      <div className="px-4 py-5 sm:px-6">
+        <h3 className="text-lg font-medium leading-6 text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+          <Lock className="h-5 w-5 text-zinc-400" />
+          Đổi mật khẩu
+        </h3>
+      </div>
+      <form onSubmit={handleSubmit} className="border-t border-zinc-200 px-4 py-5 dark:border-zinc-800 sm:px-6 space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">Mật khẩu hiện tại</label>
+          <input type="password" required value={oldPassword} onChange={(e) => setOldPassword(e.target.value)}
+            className="block w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-sky-500 focus:ring-sky-500 dark:border-zinc-600 dark:bg-zinc-700 dark:text-white" placeholder="••••••••" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">Mật khẩu mới</label>
+          <input type="password" required value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
+            className="block w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-sky-500 focus:ring-sky-500 dark:border-zinc-600 dark:bg-zinc-700 dark:text-white" placeholder="••••••••" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">Xác nhận mật khẩu mới</label>
+          <input type="password" required value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}
+            className="block w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-sky-500 focus:ring-sky-500 dark:border-zinc-600 dark:bg-zinc-700 dark:text-white" placeholder="••••••••" />
+        </div>
+        {notice && (
+          <div className={`rounded-md border px-3 py-2 text-sm ${notice.type === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-700/50 dark:bg-emerald-900/20 dark:text-emerald-300' : 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-700/50 dark:bg-rose-900/20 dark:text-rose-300'}`}>
+            {notice.text}
+          </div>
+        )}
+        <button type="submit" disabled={loading}
+          className="flex items-center gap-2 rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700 disabled:opacity-50 transition-colors">
+          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lock className="h-4 w-4" />}
+          Đổi mật khẩu
+        </button>
+      </form>
     </div>
   );
 }

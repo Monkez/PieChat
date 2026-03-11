@@ -23,7 +23,7 @@ interface MessageBubbleProps {
   activeMenuId: string | null;
   setActiveMenuId: (id: string | null) => void;
   onReaction: (msgId: string, emoji: string) => void;
-  onMenuAction: (action: 'reply' | 'forward' | 'details' | 'delete' | 'edit', msg: Message) => void;
+  onMenuAction: (action: 'reply' | 'forward' | 'details' | 'delete' | 'edit' | 'pin', msg: Message) => void;
   onRetry: (msgId: string) => void;
   getStatusLabel: (status: Message['status']) => string;
   onContactAddFriend?: (userId: string) => void;
@@ -762,6 +762,16 @@ export function MessageBubble({
                 <Info className="h-5 w-5 text-violet-600 dark:text-violet-400" />
               </div>
               <span className="text-[11px] font-medium text-zinc-600 dark:text-zinc-400">{t(language, 'msgDetails' as any)}</span>
+            </button>
+
+            <button
+              onClick={() => { onMenuAction('pin', msg); closeLongPress(); }}
+              className="flex flex-col items-center gap-1.5 rounded-xl py-3 active:bg-zinc-100 dark:active:bg-zinc-800 transition-colors"
+            >
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-100 dark:bg-orange-900/30">
+                <Pin className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+              </div>
+              <span className="text-[11px] font-medium text-zinc-600 dark:text-zinc-400">Ghim</span>
             </button>
 
             <button

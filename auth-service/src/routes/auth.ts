@@ -614,6 +614,61 @@ router.post('/reset-password', async (req: Request, res: Response) => {
     }
 });
 
+// ─── POST /auth/change-password — Change password (requires old password) ──
+router.post('/change-password', async (req: Request, res: Response) => {
+    const { phone: rawPhone, oldPassword, newPassword } = req.body as { phone?: string; oldPassword?: string; newPassword?: string };
+    const phone = normalizePhone(String(rawPhone || ''));
+    const oldPwd = String(oldPassword || '');
+    const newPwd = String(newPassword || '');
+
+    if (!phone || !oldPwd || !newPwd) {
+        res.status(400).json({ error: 'Thiếu thông tin' });
+        return;
+    }
+    if (newPwd.length < 6) {
+        res.status(400).json({ error: 'Mật khẩu mới phải ít nhất 6 ký tự' });
+        return;
+    }
+
+    const matrixUsername = resolveMatrixUsername(phone);
+
+    // Verify old password
+    const valid = await verifyPassword(matrixUsername, oldPwd);
+    if (!valid) {
+        res.status(401).json({ error: 'Mật khẩu hiện tại không đúng' });
+        return;
+    }
+
+    // Reset password via admin API
+    const serverName = process.env.DOMAIN || 'localhost';
+    const userId = `@${matrixUsername}:${serverName}`;
+
+    try {
+        const token = await getAdminToken();
+        if (!token) {
+            res.status(500).json({ error: 'Không thể kết nối admin server' });
+            return;
+        }
+
+        const resetRes = await fetch(`${matrixBaseUrl}/_dendrite/admin/resetPassword/${encodeURIComponent(userId)}`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: newPwd }),
+        });
+
+        if (resetRes.ok) {
+            console.log(`[ChangePassword] Password changed for ${userId}`);
+            res.json({ success: true, message: 'Đổi mật khẩu thành công!' });
+        } else {
+            const data = (await resetRes.json()) as { error?: string };
+            res.status(500).json({ error: data.error || 'Đổi mật khẩu thất bại' });
+        }
+    } catch (err) {
+        console.error('[ChangePassword] Error:', err);
+        res.status(500).json({ error: 'Lỗi server' });
+    }
+});
+
 // ─── GET /auth/link-preview — Fetch URL metadata ─────────
 router.get('/link-preview', async (req: Request, res: Response) => {
     const url = String(req.query.url || '');
