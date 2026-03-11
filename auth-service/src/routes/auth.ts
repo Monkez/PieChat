@@ -724,13 +724,15 @@ router.get('/admin/system-info', async (req: Request, res: Response) => {
         const execAsync = promisify(exec);
         
         try {
-            const { stdout } = await execAsync('df -h / /opt 2>/dev/null || df -h /', { timeout: 5000 });
+            const { stdout } = await execAsync('df -h /', { timeout: 5000 });
             diskInfo = stdout;
-            // Parse df output into structured data
+            // Parse df output into structured data (deduplicate by mount point)
+            const seen = new Set<string>();
             const lines = stdout.trim().split('\n').slice(1); // skip header
             for (const line of lines) {
                 const parts = line.trim().split(/\s+/);
-                if (parts.length >= 6) {
+                if (parts.length >= 6 && !seen.has(parts[5])) {
+                    seen.add(parts[5]);
                     const usePct = parseInt(parts[4]?.replace('%', '') || '0');
                     diskParsed.push({
                         filesystem: parts[0],
