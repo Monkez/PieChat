@@ -137,11 +137,6 @@ export function useWebRTC() {
 
         const pc = createPeerConnection(stream);
 
-        // Force audio & video transceivers
-        if (stream.getAudioTracks().length > 0) {
-            pc.addTransceiver('audio', { direction: 'sendrecv' });
-        }
-
         const offerSdp = await pc.createOffer({
             offerToReceiveAudio: true,
             offerToReceiveVideo: useCallStore.getState().type === 'video',
