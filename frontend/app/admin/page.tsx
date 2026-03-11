@@ -111,21 +111,32 @@ export default function AdminPage() {
   const loadUsers = useCallback(async () => {
     setUsersLoading(true);
     try {
-      const res = await matrixFetch('/_dendrite/admin/users');
-      if (res.ok) {
-        const data = (await res.json()) as MatrixUser[];
-        setUsers(Array.isArray(data) ? data : []);
-      } else {
-        // Try synapse admin API
-        const res2 = await matrixFetch('/_synapse/admin/v2/users?limit=1000');
-        if (res2.ok) {
-          const data = (await res2.json()) as { users: MatrixUser[] };
-          setUsers(data.users || []);
-        } else {
-          showNotice('error', `Lỗi tải danh sách người dùng: ${res.status}`);
-        }
+      // Use user_directory/search with broad query to find all users
+      const queries = ['u', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'v', 'w', 'x', 'y', 'z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+      const allUsers = new Map<string, MatrixUser>();
+      
+      // Search with several common prefixes to get comprehensive list
+      for (const q of queries) {
+        try {
+          const res = await matrixFetch('/_matrix/client/v3/user_directory/search', {
+            method: 'POST',
+            body: JSON.stringify({ search_term: q, limit: 100 }),
+          });
+          if (res.ok) {
+            const data = (await res.json()) as { results: Array<{ user_id: string; display_name?: string; avatar_url?: string }> };
+            for (const u of (data.results || [])) {
+              if (!allUsers.has(u.user_id)) {
+                allUsers.set(u.user_id, { name: u.user_id, displayname: u.display_name, avatar_url: u.avatar_url });
+              }
+            }
+          }
+        } catch { /* skip */ }
       }
-    } catch (err) {
+      setUsers(Array.from(allUsers.values()));
+      if (allUsers.size === 0) {
+        showNotice('error', 'Không tìm thấy người dùng nào');
+      }
+    } catch {
       showNotice('error', 'Không thể kết nối server');
     }
     setUsersLoading(false);
@@ -135,18 +146,37 @@ export default function AdminPage() {
   const loadRooms = useCallback(async () => {
     setRoomsLoading(true);
     try {
-      const res = await matrixFetch('/_dendrite/admin/rooms');
+      // Get rooms the current user has joined
+      const res = await matrixFetch('/_matrix/client/v3/joined_rooms');
       if (res.ok) {
-        const data = (await res.json()) as MatrixRoom[];
-        setRooms(Array.isArray(data) ? data : []);
-      } else {
-        const res2 = await matrixFetch('/_synapse/admin/v1/rooms?limit=1000');
-        if (res2.ok) {
-          const data = (await res2.json()) as { rooms: MatrixRoom[] };
-          setRooms(data.rooms || []);
-        } else {
-          showNotice('error', `Lỗi tải danh sách phòng: ${res.status}`);
+        const data = (await res.json()) as { joined_rooms: string[] };
+        const roomList: MatrixRoom[] = [];
+        
+        // Fetch details for each room
+        for (const roomId of (data.joined_rooms || [])) {
+          try {
+            const stateRes = await matrixFetch(`/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/state`);
+            let name = '';
+            let joinedMembers = 0;
+            let topic = '';
+            let creator = '';
+            if (stateRes.ok) {
+              const states = (await stateRes.json()) as Array<{ type: string; content: Record<string, unknown>; state_key?: string }>;
+              for (const s of states) {
+                if (s.type === 'm.room.name') name = String(s.content?.name || '');
+                if (s.type === 'm.room.topic') topic = String(s.content?.topic || '');
+                if (s.type === 'm.room.create') creator = String(s.content?.creator || '');
+                if (s.type === 'm.room.member' && s.content?.membership === 'join') joinedMembers++;
+              }
+            }
+            roomList.push({ room_id: roomId, name, joined_members: joinedMembers, topic, creator });
+          } catch {
+            roomList.push({ room_id: roomId });
+          }
         }
+        setRooms(roomList);
+      } else {
+        showNotice('error', `Lỗi tải phòng: ${res.status}`);
       }
     } catch {
       showNotice('error', 'Không thể kết nối server');
@@ -229,23 +259,13 @@ export default function AdminPage() {
   const deleteUser = async (userId: string) => {
     if (!confirm(`Xác nhận xóa tài khoản ${userId}? Hành động này không thể hoàn tác.`)) return;
     try {
-      // Try dendrite admin API
-      const res = await matrixFetch(`/_dendrite/admin/evacuateUser/${encodeURIComponent(userId)}`, { method: 'POST' });
+      // Evacuate user from all rooms via Dendrite admin API
+      const res = await matrixFetch(`/_dendrite/admin/evacuateUser/${userId}`, { method: 'POST' });
       if (res.ok) {
-        showNotice('success', `Đã xóa ${userId}`);
+        showNotice('success', `Đã loại ${userId} khỏi tất cả phòng`);
         await loadUsers();
       } else {
-        // Deactivate via synapse API
-        const res2 = await matrixFetch(`/_synapse/admin/v2/users/${encodeURIComponent(userId)}`, {
-          method: 'PUT',
-          body: JSON.stringify({ deactivated: true }),
-        });
-        if (res2.ok) {
-          showNotice('success', `Đã vô hiệu hóa ${userId}`);
-          await loadUsers();
-        } else {
-          showNotice('error', 'Không thể xóa tài khoản');
-        }
+        showNotice('error', `Không thể xóa tài khoản (${res.status})`);
       }
     } catch { showNotice('error', 'Lỗi kết nối'); }
   };
@@ -254,12 +274,22 @@ export default function AdminPage() {
   const deleteRoom = async (roomId: string) => {
     if (!confirm(`Xác nhận xóa phòng ${roomId}?`)) return;
     try {
-      const res = await matrixFetch(`/_dendrite/admin/rooms/${encodeURIComponent(roomId)}`, { method: 'DELETE' });
-      if (res.ok) {
+      // First evacuate all users from the room
+      const evacRes = await matrixFetch(`/_dendrite/admin/evacuateRoom/${roomId}`, { method: 'POST' });
+      // Then purge the room from database
+      const purgeRes = await matrixFetch(`/_dendrite/admin/purgeRoom/${roomId}`, { method: 'POST' });
+      if (evacRes.ok || purgeRes.ok) {
         showNotice('success', 'Đã xóa phòng');
         await loadRooms();
       } else {
-        showNotice('error', 'Không thể xóa phòng');
+        // Fallback: just leave the room
+        const leaveRes = await matrixFetch(`/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/leave`, { method: 'POST', body: '{}' });
+        if (leaveRes.ok) {
+          showNotice('success', 'Đã rời phòng');
+          await loadRooms();
+        } else {
+          showNotice('error', 'Không thể xóa phòng');
+        }
       }
     } catch { showNotice('error', 'Lỗi kết nối'); }
   };
@@ -270,7 +300,7 @@ export default function AdminPage() {
   const handleResetPassword = async () => {
     if (!resetUserId || !resetPassword) return;
     try {
-      const res = await matrixFetch(`/_dendrite/admin/resetPassword/${encodeURIComponent(resetUserId)}`, {
+      const res = await matrixFetch(`/_dendrite/admin/resetPassword/${resetUserId}`, {
         method: 'POST',
         body: JSON.stringify({ password: resetPassword }),
       });
