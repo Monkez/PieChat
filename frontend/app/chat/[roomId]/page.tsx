@@ -102,6 +102,10 @@ export default function RoomPage() {
   const [isReordering, setIsReordering] = useState(false);
   const [draggedItemIndex, setDraggedItemIndex] = useState<number | null>(null);
   const [pendingRoles, setPendingRoles] = useState<Record<string, 'leader' | 'deputy' | 'member'>>({});
+  const [isDragging, setIsDragging] = useState(false);
+  const [droppedFiles, setDroppedFiles] = useState<File[]>([]);
+  const [dropCaption, setDropCaption] = useState('');
+  const dragCounterRef = useRef(0);
 
   useEffect(() => {
     if (isMemberModalOpen && room) {
@@ -864,7 +868,65 @@ export default function RoomPage() {
   }, [room?.type, room?.members, currentUser?.id]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div
+      className="flex h-full min-h-0 flex-col relative"
+      onDragEnter={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounterRef.current++;
+        if (e.dataTransfer.types.includes('Files')) setIsDragging(true);
+      }}
+      onDragOver={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
+      onDragLeave={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounterRef.current--;
+        if (dragCounterRef.current <= 0) {
+          dragCounterRef.current = 0;
+          setIsDragging(false);
+        }
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounterRef.current = 0;
+        setIsDragging(false);
+        const items = e.dataTransfer.items;
+        const fileList: File[] = [];
+        if (items) {
+          for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            if (item.kind === 'file') {
+              const file = item.getAsFile();
+              if (file) fileList.push(file);
+            }
+          }
+        } else {
+          for (let i = 0; i < e.dataTransfer.files.length; i++) {
+            fileList.push(e.dataTransfer.files[i]);
+          }
+        }
+        if (fileList.length > 0) {
+          setDroppedFiles(fileList);
+          setDropCaption('');
+        }
+      }}
+    >
+      {/* Drag overlay */}
+      {isDragging && (
+        <div className="absolute inset-0 z-[300] flex items-center justify-center bg-sky-500/10 backdrop-blur-sm border-2 border-dashed border-sky-400 rounded-xl pointer-events-none animate-in fade-in duration-150">
+          <div className="flex flex-col items-center gap-3 text-sky-600 dark:text-sky-400">
+            <div className="h-16 w-16 rounded-2xl bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center">
+              <Paperclip className="h-8 w-8" />
+            </div>
+            <p className="text-lg font-bold">Thả file để gửi</p>
+            <p className="text-sm text-sky-500/70">Hỗ trợ ảnh, video, tài liệu, thư mục</p>
+          </div>
+        </div>
+      )}
       <header className="relative z-[100] border-b border-sky-100 bg-white/90 px-2 sm:px-4 backdrop-blur dark:border-sky-900/40 dark:bg-zinc-900/90 shadow-sm" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
         <div className="flex h-14 sm:h-16 items-center gap-2">
           <Link
@@ -1624,6 +1686,107 @@ export default function RoomPage() {
                     </button>
                   );
                 })}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Dropped Files Preview */}
+      {droppedFiles.length > 0 && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-md mx-4 rounded-2xl bg-white dark:bg-zinc-900 shadow-2xl border border-zinc-200 dark:border-zinc-700 overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-700 flex items-center justify-between">
+              <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                Gửi {droppedFiles.length} tệp
+              </h3>
+              <button onClick={() => { setDroppedFiles([]); setDropCaption(''); }} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* File previews */}
+            <div className="max-h-48 overflow-y-auto p-3 space-y-1.5">
+              {droppedFiles.map((file, i) => {
+                const isImage = file.type.startsWith('image/');
+                const isVideo = file.type.startsWith('video/');
+                const icon = isImage ? '📷' : isVideo ? '🎬' : '📎';
+                const sizeStr = file.size < 1024 * 1024
+                  ? `${(file.size / 1024).toFixed(0)} KB`
+                  : `${(file.size / 1024 / 1024).toFixed(1)} MB`;
+                return (
+                  <div key={i} className="flex items-center gap-3 rounded-xl bg-zinc-50 dark:bg-zinc-800 px-3 py-2">
+                    {isImage ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={URL.createObjectURL(file)}
+                        alt=""
+                        className="h-10 w-10 rounded-lg object-cover shrink-0"
+                      />
+                    ) : (
+                      <div className="h-10 w-10 rounded-lg bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center text-lg shrink-0">
+                        {icon}
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs font-medium text-zinc-900 dark:text-zinc-100">{file.name}</p>
+                      <p className="text-[10px] text-zinc-500">{sizeStr}</p>
+                    </div>
+                    <button
+                      onClick={() => setDroppedFiles(prev => prev.filter((_, idx) => idx !== i))}
+                      className="text-zinc-400 hover:text-rose-500 shrink-0"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Caption input */}
+            <div className="px-4 py-3 border-t border-zinc-200 dark:border-zinc-700 space-y-3">
+              <input
+                type="text"
+                value={dropCaption}
+                onChange={(e) => setDropCaption(e.target.value)}
+                placeholder="Thêm tin nhắn kèm theo (tuỳ chọn)..."
+                className="w-full rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    const caption = dropCaption.trim();
+                    const files = [...droppedFiles];
+                    setDroppedFiles([]); setDropCaption('');
+                    if (caption) void handleSendMessage(caption);
+                    void handleSendFiles(files);
+                  }
+                }}
+                autoFocus
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    const files = [...droppedFiles];
+                    setDroppedFiles([]); setDropCaption('');
+                    void handleSendFiles(files);
+                  }}
+                  className="flex-1 rounded-xl bg-sky-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-700 transition-colors shadow-sm"
+                >
+                  Gửi ngay
+                </button>
+                {dropCaption.trim() && (
+                  <button
+                    onClick={() => {
+                      const caption = dropCaption.trim();
+                      const files = [...droppedFiles];
+                      setDroppedFiles([]); setDropCaption('');
+                      void handleSendMessage(caption);
+                      void handleSendFiles(files);
+                    }}
+                    className="flex-1 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 transition-colors shadow-sm"
+                  >
+                    Gửi kèm text
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
