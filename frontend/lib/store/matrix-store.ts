@@ -263,7 +263,7 @@ export const useMatrixStore = create<MatrixState>((set, get) => ({
 
           void matrixService.showNotification(`${senderName} (${roomName})`, {
             body: nextRoom.lastMessage?.content,
-            icon: '/logo.png'
+            icon: '/icons/icon-192.png'
           });
         }
 
