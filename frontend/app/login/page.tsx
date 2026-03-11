@@ -186,11 +186,11 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-sky-50 via-white to-sky-100 px-4 py-12 dark:from-[#060b12] dark:via-[#0b1420] dark:to-black sm:px-6 lg:px-8">
+      <div className="absolute top-4 right-4 z-50" style={{ top: 'max(1rem, env(safe-area-inset-top, 1rem))' }}>
+        <LanguageSwitcher />
+      </div>
       <div className="w-full max-w-md space-y-8">
         <div className="text-center">
-          <div className="mb-4 flex justify-center">
-            <LanguageSwitcher />
-          </div>
           <Link href="/" className="inline-flex items-center gap-2 text-4xl font-bold tracking-tighter text-sky-700 dark:text-sky-300">
             <Image src="/PieChatIcon.png" alt="PieChat" width={36} height={36} className="h-9 w-9 rounded-lg" />
             <span>PieChat</span>

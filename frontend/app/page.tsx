@@ -46,7 +46,7 @@ export default function Home() {
 
   return (
     <div className="grid min-h-screen grid-rows-[auto_1fr_auto] items-center justify-items-center gap-6 bg-gradient-to-b from-sky-50 via-white to-sky-100 p-6 pb-16 font-sans dark:from-[#060b12] dark:via-[#0b1420] dark:to-black sm:p-20">
-      <header className="w-full flex items-center justify-center absolute top-0 left-0 right-0 p-4" style={{ paddingTop: 'max(1rem, env(safe-area-inset-top, 1rem))' }}>
+      <header className="w-full flex items-center justify-end absolute top-0 left-0 right-0 p-4" style={{ paddingTop: 'max(1rem, env(safe-area-inset-top, 1rem))' }}>
         <LanguageSwitcher />
       </header>
       <main className="flex flex-col gap-4 row-start-2 items-center text-center">
