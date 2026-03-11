@@ -4,7 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Send, Paperclip, MoreVertical, Phone, Video, Search, UserPlus, Crown, ShieldCheck, Trash2, Users, GripVertical, Shield, MessageSquare, Plus, ArrowLeft, FolderOpen, X } from 'lucide-react';
+import { Send, Paperclip, MoreVertical, Phone, Video, Search, UserPlus, Crown, ShieldCheck, Trash2, Users, GripVertical, Shield, MessageSquare, Plus, ArrowLeft, FolderOpen, X, Check } from 'lucide-react';
 import { MessageBubble } from '@/components/chat/message-bubble';
 import { ChatInput, type ReplyEditState } from '@/components/chat/chat-input';
 import { MediaGallery } from '@/components/chat/media-gallery';
@@ -68,6 +68,8 @@ export default function RoomPage() {
   const [isGalleryOpen, setIsGalleryOpen] = useState(false);
   const [forwardingMessage, setForwardingMessage] = useState<Message | null>(null);
   const [forwardSearch, setForwardSearch] = useState('');
+  const [forwardTargetChannel, setForwardTargetChannel] = useState<string | null>(null);
+  const [forwardSelectedMembers, setForwardSelectedMembers] = useState<Set<string>>(new Set());
 
   // Enable notification checker
   useChatNotifications();
@@ -1627,7 +1629,7 @@ export default function RoomPage() {
       />
 
       {/* Forward Message Modal */}
-      {forwardingMessage && (
+      {forwardingMessage && !forwardTargetChannel && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="relative w-full max-w-sm mx-4 rounded-2xl bg-white dark:bg-zinc-900 shadow-2xl border border-zinc-200 dark:border-zinc-700 overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-700">
@@ -1661,28 +1663,48 @@ export default function RoomPage() {
                 .slice(0, 20)
                 .map(r => {
                   const rName = r.name || r.members.find(m => m.id !== currentUser?.id)?.displayName || r.id;
+                  const isChannel = r.type === 'channel';
                   return (
                     <button
                       key={r.id}
                       onClick={async () => {
-                        try {
-                          await sendMessage(r.id, `↪️ [Chuyển tiếp]\n${forwardingMessage.content}`);
-                          setForwardingMessage(null);
+                        if (isChannel) {
+                          // Step 2: Show member selection for channel
+                          setForwardTargetChannel(r.id);
+                          // Default: current room members + channel leaders/deputies
+                          const defaultMembers = new Set<string>();
+                          room?.members.forEach(m => { if (m.id !== currentUser?.id) defaultMembers.add(m.id); });
+                          // Add channel leaders/deputies
+                          Object.entries(r.channelRoles || {}).forEach(([uid, role]) => {
+                            if (uid !== currentUser?.id && (role === 'leader' || role === 'deputy')) {
+                              defaultMembers.add(uid);
+                            }
+                          });
+                          setForwardSelectedMembers(defaultMembers);
                           setForwardSearch('');
-                          router.push(`/chat/${encodeURIComponent(r.id)}`);
-                        } catch {
-                          alert('Chuyển tiếp thất bại');
+                        } else {
+                          try {
+                            await sendMessage(r.id, `↪️ [Chuyển tiếp]\n${forwardingMessage.content}`);
+                            setForwardingMessage(null);
+                            setForwardSearch('');
+                            router.push(`/chat/${encodeURIComponent(r.id)}`);
+                          } catch {
+                            alert('Chuyển tiếp thất bại');
+                          }
                         }
                       }}
                       className="flex w-full items-center gap-3 px-3 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-left"
                     >
-                      <div className="h-9 w-9 shrink-0 rounded-full bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center text-sky-600 dark:text-sky-400 font-bold text-sm">
+                      <div className={`h-9 w-9 shrink-0 rounded-full flex items-center justify-center font-bold text-sm ${isChannel ? 'bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400' : 'bg-sky-100 dark:bg-sky-900/30 text-sky-600 dark:text-sky-400'}`}>
                         {rName.charAt(0).toUpperCase()}
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">{rName}</p>
-                        <p className="truncate text-[10px] text-zinc-500">{r.type === 'dm' ? 'Tin nhắn' : r.type === 'group' ? 'Nhóm' : 'Kênh'}</p>
+                        <p className="truncate text-[10px] text-zinc-500">
+                          {r.type === 'dm' ? 'Tin nhắn' : r.type === 'group' ? 'Nhóm' : 'Kênh → tạo nhóm mới'}
+                        </p>
                       </div>
+                      {isChannel && <Plus className="h-4 w-4 text-violet-500 shrink-0" />}
                     </button>
                   );
                 })}
@@ -1690,6 +1712,94 @@ export default function RoomPage() {
           </div>
         </div>
       )}
+
+      {/* Forward to Channel — Step 2: Member selection */}
+      {forwardingMessage && forwardTargetChannel && (() => {
+        const targetChannel = rooms.find(r => r.id === forwardTargetChannel);
+        if (!targetChannel) return null;
+        const allCandidates = targetChannel.members.filter(m => m.id !== currentUser?.id);
+        return (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="relative w-full max-w-sm mx-4 rounded-2xl bg-white dark:bg-zinc-900 shadow-2xl border border-zinc-200 dark:border-zinc-700 overflow-hidden animate-in zoom-in-95 duration-200">
+              <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-700">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">Tạo nhóm trong {targetChannel.name}</h3>
+                    <p className="text-[10px] text-zinc-500 mt-0.5">Chọn thành viên sẽ được thêm vào nhóm</p>
+                  </div>
+                  <button onClick={() => { setForwardTargetChannel(null); setForwardSelectedMembers(new Set()); }} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300">
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+              <div className="max-h-56 overflow-y-auto p-2 space-y-0.5">
+                {allCandidates.map(member => {
+                  const isSelected = forwardSelectedMembers.has(member.id);
+                  const channelRole = targetChannel.channelRoles?.[member.id];
+                  const isLeaderDeputy = channelRole === 'leader' || channelRole === 'deputy';
+                  return (
+                    <button
+                      key={member.id}
+                      onClick={() => {
+                        setForwardSelectedMembers(prev => {
+                          const next = new Set(prev);
+                          if (next.has(member.id)) next.delete(member.id);
+                          else next.add(member.id);
+                          return next;
+                        });
+                      }}
+                      className={`flex w-full items-center gap-3 px-3 py-2 rounded-xl transition-colors text-left ${isSelected ? 'bg-sky-50 dark:bg-sky-900/20' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
+                    >
+                      <div className={`h-5 w-5 shrink-0 rounded border-2 flex items-center justify-center transition-colors ${isSelected ? 'bg-sky-500 border-sky-500 text-white' : 'border-zinc-300 dark:border-zinc-600'}`}>
+                        {isSelected && <Check className="h-3 w-3" />}
+                      </div>
+                      <div className="h-8 w-8 shrink-0 rounded-full bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center text-xs font-bold text-zinc-600 dark:text-zinc-300">
+                        {(member.displayName || member.username || '?').charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">{member.displayName || member.username}</p>
+                      </div>
+                      {isLeaderDeputy && (
+                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold ${channelRole === 'leader' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400'}`}>
+                          {channelRole === 'leader' ? 'Trưởng' : 'Phó'}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="px-4 py-3 border-t border-zinc-200 dark:border-zinc-700 flex gap-2">
+                <button
+                  onClick={() => { setForwardTargetChannel(null); }}
+                  className="flex-1 rounded-xl border border-zinc-300 dark:border-zinc-600 px-4 py-2.5 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                >
+                  Quay lại
+                </button>
+                <button
+                  onClick={async () => {
+                    try {
+                      const groupName = `Chuyển tiếp - ${new Date().toLocaleDateString('vi')}`;
+                      const memberIds = Array.from(forwardSelectedMembers);
+                      const newGroup = await matrixService.createGroup(forwardTargetChannel, groupName, memberIds);
+                      await sendMessage(newGroup.id, `↪️ [Chuyển tiếp]\n${forwardingMessage.content}`);
+                      setForwardingMessage(null);
+                      setForwardTargetChannel(null);
+                      setForwardSelectedMembers(new Set());
+                      await fetchRooms();
+                      router.push(`/chat/${encodeURIComponent(newGroup.id)}`);
+                    } catch {
+                      alert('Tạo nhóm thất bại');
+                    }
+                  }}
+                  className="flex-1 rounded-xl bg-sky-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-700 transition-colors shadow-sm"
+                >
+                  Tạo nhóm ({forwardSelectedMembers.size})
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
       {/* Dropped Files Preview */}
       {droppedFiles.length > 0 && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">

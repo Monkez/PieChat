@@ -1341,18 +1341,6 @@ export default function ChatLayout({
                           {t(language, 'chatDelete')}
                         </button>
 
-                        <button
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            addAssistantRoom(room.id);
-                            void matrixService.markRoomAsAssistant(room.id);
-                          }}
-                          className="flex w-full items-center gap-2 px-3 py-2 text-xs text-sky-600 hover:bg-sky-50 dark:text-sky-400 dark:hover:bg-sky-900/20"
-                        >
-                          <Bot className="h-3.5 w-3.5" />
-                          Chuyển vào Trợ lý
-                        </button>
 
                         <button
                           onClick={(e) => {

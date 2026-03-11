@@ -1088,7 +1088,7 @@ class MatrixService {
       });
     const roomId = payload.room_id;
 
-    // Invite members if any
+    // Invite explicitly listed members
     if (memberUserIds.length > 0) {
       const invite = await this.resolveInviteUserIds(memberUserIds);
       await Promise.all(
@@ -1102,6 +1102,32 @@ class MatrixService {
           ).catch(() => null)
         )
       );
+    }
+
+    // Auto-invite channel leaders/deputies so they can always see group messages
+    if (channelId) {
+      try {
+        const channelState = await this.fetchRoomState(channelId).catch(() => []);
+        const channelRoleEvent = channelState.find((e: any) => e.type === 'io.piechat.roles');
+        const channelRoles = this.normalizeRoleMap((channelRoleEvent?.content as any)?.channelRoles);
+        const currentUserId = this.getCurrentUserId();
+        const leaderDeputyIds = Object.entries(channelRoles)
+          .filter(([uid, role]) => uid !== currentUserId && (role === 'leader' || role === 'deputy'))
+          .map(([uid]) => uid)
+          .filter(uid => !memberUserIds.includes(uid));
+        if (leaderDeputyIds.length > 0) {
+          await Promise.all(
+            leaderDeputyIds.map((userId) =>
+              this.request(
+                `/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/invite`,
+                { method: 'POST', body: JSON.stringify({ user_id: userId }) }
+              ).catch(() => null)
+            )
+          );
+        }
+      } catch {
+        // Channel roles not accessible, skip
+      }
     }
 
     const currentUserId = this.getCurrentUserId();
