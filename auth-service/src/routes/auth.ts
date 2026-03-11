@@ -424,6 +424,114 @@ router.get('/admin/stats', (req: Request, res: Response) => {
     res.json(stats);
 });
 
+// GET /auth/admin/config — server config info (dev password, etc.)
+router.get('/admin/config', (req: Request, res: Response) => {
+    if (!isAdmin(req)) { res.status(403).json({ error: 'Unauthorized' }); return; }
+    res.json({
+        devMatrixPassword: process.env.DEV_MATRIX_PASSWORD || '12345678',
+        matrixBaseUrl: process.env.MATRIX_BASE_URL || 'http://localhost:8008',
+        nodeEnv: process.env.NODE_ENV || 'development',
+        smsProvider: process.env.SMS_PROVIDER || 'none',
+    });
+});
+
+// Helper: get an admin access token by logging in to Matrix
+let cachedAdminToken: { token: string; expiresAt: number } | null = null;
+async function getAdminToken(): Promise<string | null> {
+    if (cachedAdminToken && cachedAdminToken.expiresAt > Date.now()) {
+        return cachedAdminToken.token;
+    }
+    const adminUser = process.env.ADMIN_MATRIX_USER || 'admin';
+    const adminPassword = process.env.DEV_MATRIX_PASSWORD || '12345678';
+    try {
+        const res = await fetch(`${matrixBaseUrl}/_matrix/client/v3/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                type: 'm.login.password',
+                identifier: { type: 'm.id.user', user: adminUser },
+                password: adminPassword,
+            }),
+        });
+        if (res.ok) {
+            const data = (await res.json()) as { access_token: string };
+            cachedAdminToken = { token: data.access_token, expiresAt: Date.now() + 3600_000 };
+            return data.access_token;
+        }
+    } catch { /* ignore */ }
+    return null;
+}
+
+// GET /auth/admin/users — list all users via Matrix user_directory/search
+router.get('/admin/users', async (req: Request, res: Response) => {
+    if (!isAdmin(req)) { res.status(403).json({ error: 'Unauthorized' }); return; }
+    const token = await getAdminToken();
+    if (!token) { res.status(500).json({ error: 'Cannot authenticate to Matrix' }); return; }
+    
+    const allUsers = new Map<string, { user_id: string; display_name?: string; avatar_url?: string }>();
+    const queries = ['a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z','0','1','2','3','4','5','6','7','8','9'];
+    
+    for (const q of queries) {
+        try {
+            const r = await fetch(`${matrixBaseUrl}/_matrix/client/v3/user_directory/search`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ search_term: q, limit: 100 }),
+            });
+            if (r.ok) {
+                const data = (await r.json()) as { results: Array<{ user_id: string; display_name?: string; avatar_url?: string }> };
+                for (const u of (data.results || [])) {
+                    if (!allUsers.has(u.user_id)) allUsers.set(u.user_id, u);
+                }
+            }
+        } catch { /* skip */ }
+    }
+    res.json({ users: Array.from(allUsers.values()) });
+});
+
+// GET /auth/admin/rooms — list all rooms the admin has joined
+router.get('/admin/rooms', async (req: Request, res: Response) => {
+    if (!isAdmin(req)) { res.status(403).json({ error: 'Unauthorized' }); return; }
+    const token = await getAdminToken();
+    if (!token) { res.status(500).json({ error: 'Cannot authenticate to Matrix' }); return; }
+    
+    try {
+        const r = await fetch(`${matrixBaseUrl}/_matrix/client/v3/joined_rooms`, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!r.ok) { res.json({ rooms: [] }); return; }
+        const data = (await r.json()) as { joined_rooms: string[] };
+        
+        const rooms: Array<{ room_id: string; name?: string; joined_members?: number; topic?: string; creator?: string }> = [];
+        for (const roomId of (data.joined_rooms || [])) {
+            try {
+                const stateRes = await fetch(`${matrixBaseUrl}/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/state`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+                let name = '';
+                let members = 0;
+                let topic = '';
+                let creator = '';
+                if (stateRes.ok) {
+                    const states = (await stateRes.json()) as Array<{ type: string; content: Record<string, unknown>; state_key?: string }>;
+                    for (const s of states) {
+                        if (s.type === 'm.room.name') name = String(s.content?.name || '');
+                        if (s.type === 'm.room.topic') topic = String(s.content?.topic || '');
+                        if (s.type === 'm.room.create') creator = String(s.content?.creator || '');
+                        if (s.type === 'm.room.member' && s.content?.membership === 'join') members++;
+                    }
+                }
+                rooms.push({ room_id: roomId, name, joined_members: members, topic, creator });
+            } catch {
+                rooms.push({ room_id: roomId });
+            }
+        }
+        res.json({ rooms });
+    } catch {
+        res.json({ rooms: [] });
+    }
+});
+
 // GET /auth/admin/docker-logs — read recent docker logs
 router.get('/admin/docker-logs', async (req: Request, res: Response) => {
     if (!isAdmin(req)) { res.status(403).json({ error: 'Unauthorized' }); return; }

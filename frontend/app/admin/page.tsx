@@ -84,6 +84,7 @@ export default function AdminPage() {
   // Overview state
   const [serverInfo, setServerInfo] = useState<Record<string, unknown> | null>(null);
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
+  const [devPassword, setDevPassword] = useState('???');
 
   // Users state
   const [users, setUsers] = useState<MatrixUser[]>([]);
@@ -141,12 +142,19 @@ export default function AdminPage() {
       setServerInfo({ versions, media });
     } catch { /* ignore */ }
 
-    // Load system info from auth service
+    // Load system info + config from auth service
     try {
-      const sysRes = await fetch(authUrl('/admin/system-info?key=piechat-admin-dev'));
+      const [sysRes, cfgRes] = await Promise.all([
+        fetch(authUrl('/admin/system-info?key=piechat-admin-dev')),
+        fetch(authUrl('/admin/config?key=piechat-admin-dev')),
+      ]);
       if (sysRes.ok) {
         const data = (await sysRes.json()) as SystemInfo;
         setSystemInfo(data);
+      }
+      if (cfgRes.ok) {
+        const cfg = (await cfgRes.json()) as { devMatrixPassword?: string };
+        if (cfg.devMatrixPassword) setDevPassword(cfg.devMatrixPassword);
       }
     } catch { /* ignore */ }
   }, [matrixFetch]);
@@ -155,70 +163,27 @@ export default function AdminPage() {
   const loadUsers = useCallback(async () => {
     setUsersLoading(true);
     try {
-      // Use user_directory/search with broad query to find all users
-      const queries = ['u', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'v', 'w', 'x', 'y', 'z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
-      const allUsers = new Map<string, MatrixUser>();
-      
-      // Search with several common prefixes to get comprehensive list
-      for (const q of queries) {
-        try {
-          const res = await matrixFetch('/_matrix/client/v3/user_directory/search', {
-            method: 'POST',
-            body: JSON.stringify({ search_term: q, limit: 100 }),
-          });
-          if (res.ok) {
-            const data = (await res.json()) as { results: Array<{ user_id: string; display_name?: string; avatar_url?: string }> };
-            for (const u of (data.results || [])) {
-              if (!allUsers.has(u.user_id)) {
-                allUsers.set(u.user_id, { name: u.user_id, displayname: u.display_name, avatar_url: u.avatar_url });
-              }
-            }
-          }
-        } catch { /* skip */ }
-      }
-      setUsers(Array.from(allUsers.values()));
-      if (allUsers.size === 0) {
-        showNotice('error', 'Không tìm thấy người dùng nào');
+      const res = await fetch(authUrl('/admin/users?key=piechat-admin-dev'));
+      if (res.ok) {
+        const data = (await res.json()) as { users: Array<{ user_id: string; display_name?: string; avatar_url?: string }> };
+        setUsers((data.users || []).map(u => ({ name: u.user_id, displayname: u.display_name, avatar_url: u.avatar_url })));
+      } else {
+        showNotice('error', `Lỗi tải người dùng: ${res.status}`);
       }
     } catch {
       showNotice('error', 'Không thể kết nối server');
     }
     setUsersLoading(false);
-  }, [matrixFetch]);
+  }, []);
 
   // ─── Load Rooms ────────────────────────────────────────
   const loadRooms = useCallback(async () => {
     setRoomsLoading(true);
     try {
-      // Get rooms the current user has joined
-      const res = await matrixFetch('/_matrix/client/v3/joined_rooms');
+      const res = await fetch(authUrl('/admin/rooms?key=piechat-admin-dev'));
       if (res.ok) {
-        const data = (await res.json()) as { joined_rooms: string[] };
-        const roomList: MatrixRoom[] = [];
-        
-        // Fetch details for each room
-        for (const roomId of (data.joined_rooms || [])) {
-          try {
-            const stateRes = await matrixFetch(`/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/state`);
-            let name = '';
-            let joinedMembers = 0;
-            let topic = '';
-            let creator = '';
-            if (stateRes.ok) {
-              const states = (await stateRes.json()) as Array<{ type: string; content: Record<string, unknown>; state_key?: string }>;
-              for (const s of states) {
-                if (s.type === 'm.room.name') name = String(s.content?.name || '');
-                if (s.type === 'm.room.topic') topic = String(s.content?.topic || '');
-                if (s.type === 'm.room.create') creator = String(s.content?.creator || '');
-                if (s.type === 'm.room.member' && s.content?.membership === 'join') joinedMembers++;
-              }
-            }
-            roomList.push({ room_id: roomId, name, joined_members: joinedMembers, topic, creator });
-          } catch {
-            roomList.push({ room_id: roomId });
-          }
-        }
-        setRooms(roomList);
+        const data = (await res.json()) as { rooms: MatrixRoom[] };
+        setRooms(data.rooms || []);
       } else {
         showNotice('error', `Lỗi tải phòng: ${res.status}`);
       }
@@ -226,7 +191,7 @@ export default function AdminPage() {
       showNotice('error', 'Không thể kết nối server');
     }
     setRoomsLoading(false);
-  }, [matrixFetch]);
+  }, []);
 
   // ─── Load Logs ─────────────────────────────────────────
   const loadLogs = useCallback(async (phone?: string) => {
@@ -683,7 +648,7 @@ export default function AdminPage() {
                             </div>
                           </td>
                           <td className="px-4 py-3 hidden md:table-cell">
-                            <span className="font-mono text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-1.5 py-0.5 rounded">12345678</span>
+                            <span className="text-xs text-zinc-400">🔒 Hashed</span>
                           </td>
                           <td className="px-4 py-3 text-right">
                             <div className="flex items-center justify-end gap-1">
