@@ -862,6 +862,31 @@ export function MessageBubble({
           <div className="mb-1">
             {renderMediaContent()}
           </div>
+        ) : msg.callInfo ? (
+          /* Call Message with custom icons */
+          <div className="flex items-center gap-2.5 py-1">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={
+                msg.callInfo.type === 'video'
+                  ? (msg.callInfo.status === 'missed' ? '/call-icons/missing-video-call.png' : '/call-icons/video-call.png')
+                  : (msg.callInfo.status === 'missed' ? '/call-icons/missing-call.png' : '/call-icons/call.png')
+              }
+              alt="call"
+              className="h-7 w-7 object-contain"
+            />
+            <div>
+              <p className={cn(
+                "text-[13px] font-semibold leading-tight",
+                msg.callInfo.status === 'missed' ? "text-rose-500" : "text-zinc-800 dark:text-zinc-200"
+              )}>
+                {msg.content}
+              </p>
+              {msg.callInfo.duration && (
+                <p className="text-[11px] text-zinc-400 tabular-nums">{msg.callInfo.duration}</p>
+              )}
+            </div>
+          </div>
         ) : (
           /* Text Message Content */
           <div>

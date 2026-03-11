@@ -57,6 +57,7 @@ export interface Message {
   replyTo?: { eventId: string; senderId: string; body: string };
   edited?: boolean;
   inlineButtons?: Array<{ id: string; label: string; action?: string; url?: string; style?: 'primary' | 'secondary' | 'danger' }>;
+  callInfo?: { type: 'voice' | 'video'; status: 'answered' | 'missed' | 'ongoing' | 'calling'; duration?: string };
 }
 
 export interface UserDirectoryAccount {
@@ -1492,24 +1493,35 @@ class MatrixService {
             const callId = event.content.call_id as string;
             const info = callMap[callId];
             const isVideo = (event.content.offer as any)?.sdp?.includes('m=video');
-            const icon = isVideo ? '📹' : '📞';
-            const typeLabel = isVideo ? 'Video' : 'Voice';
+            const callType = isVideo ? 'video' as const : 'voice' as const;
+            const typeLabel = isVideo ? 'Video' : 'Thoại';
+
+            let callStatus: 'answered' | 'missed' | 'ongoing' | 'calling' = 'calling';
+            let durationStr: string | undefined;
 
             if (info?.hangup) {
               if (info.answer) {
+                callStatus = 'answered';
                 const durationMs = info.hangup.origin_server_ts - info.answer.origin_server_ts;
                 const seconds = Math.floor(durationMs / 1000);
                 const mm = Math.floor(seconds / 60).toString().padStart(2, '0');
                 const ss = (seconds % 60).toString().padStart(2, '0');
-                content = `${icon} Cuộc gọi ${typeLabel.toLowerCase()} - Thời lượng ${mm}:${ss}`;
+                durationStr = `${mm}:${ss}`;
+                content = `Cuộc gọi ${typeLabel.toLowerCase()} - ${mm}:${ss}`;
               } else {
-                content = `${icon} Cuộc gọi nhỡ (${typeLabel.toLowerCase()})`;
+                callStatus = 'missed';
+                content = `Cuộc gọi nhỡ (${typeLabel.toLowerCase()})`;
               }
             } else if (info?.answer) {
-              content = `${icon} Cuộc gọi ${typeLabel.toLowerCase()} - Đang diễn ra`;
+              callStatus = 'ongoing';
+              content = `Cuộc gọi ${typeLabel.toLowerCase()} - Đang diễn ra`;
             } else {
-              content = `${icon} Cuộc gọi ${typeLabel.toLowerCase()} - Đang gọi...`;
+              callStatus = 'calling';
+              content = `Cuộc gọi ${typeLabel.toLowerCase()} - Đang gọi...`;
             }
+
+            // Store call info for rendering custom icons
+            (event as any)._callInfo = { type: callType, status: callStatus, duration: durationStr };
           }
 
           // Parse reply-to
@@ -1569,6 +1581,7 @@ class MatrixService {
             replyTo,
             edited,
             inlineButtons: (event.content?.['io.piechat.buttons'] as Message['inlineButtons']) || undefined,
+            callInfo: (event as any)._callInfo || undefined,
           };
         })
         .filter(Boolean)
