@@ -437,28 +437,69 @@ router.get('/admin/config', (req: Request, res: Response) => {
 
 // Helper: get an admin access token by logging in to Matrix
 let cachedAdminToken: { token: string; expiresAt: number } | null = null;
+const ADMIN_USER = 'piechat_admin';
+const ADMIN_PASS = 'PieChat_Admin_2024!';
+
 async function getAdminToken(): Promise<string | null> {
     if (cachedAdminToken && cachedAdminToken.expiresAt > Date.now()) {
         return cachedAdminToken.token;
     }
-    const adminUser = process.env.ADMIN_MATRIX_USER || 'admin';
-    const adminPassword = process.env.DEV_MATRIX_PASSWORD || '12345678';
+    
+    // Step 1: Try logging in as admin user
     try {
         const res = await fetch(`${matrixBaseUrl}/_matrix/client/v3/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 type: 'm.login.password',
-                identifier: { type: 'm.id.user', user: adminUser },
-                password: adminPassword,
+                identifier: { type: 'm.id.user', user: ADMIN_USER },
+                password: ADMIN_PASS,
             }),
         });
         if (res.ok) {
             const data = (await res.json()) as { access_token: string };
             cachedAdminToken = { token: data.access_token, expiresAt: Date.now() + 3600_000 };
+            console.log('[Admin] Logged in as', ADMIN_USER);
             return data.access_token;
         }
     } catch { /* ignore */ }
+    
+    // Step 2: Register admin user using shared secret
+    const sharedSecret = process.env.REGISTRATION_SHARED_SECRET;
+    if (sharedSecret) {
+        try {
+            const crypto = await import('crypto');
+            // Get nonce
+            const nonceRes = await fetch(`${matrixBaseUrl}/_synapse/admin/v1/register`);
+            if (!nonceRes.ok) { console.error('[Admin] Cannot get nonce:', nonceRes.status); return null; }
+            const { nonce } = (await nonceRes.json()) as { nonce: string };
+            
+            // Generate HMAC: nonce\0username\0password\0<admin|notadmin>
+            const mac = crypto.createHmac('sha1', sharedSecret);
+            mac.update(nonce + '\0' + ADMIN_USER + '\0' + ADMIN_PASS + '\0admin');
+            const hmac = mac.digest('hex');
+            
+            // Register
+            const regRes = await fetch(`${matrixBaseUrl}/_synapse/admin/v1/register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nonce, username: ADMIN_USER, password: ADMIN_PASS, admin: true, mac: hmac }),
+            });
+            const regData = (await regRes.json()) as { access_token?: string; user_id?: string; errcode?: string };
+            
+            if (regData.access_token) {
+                cachedAdminToken = { token: regData.access_token, expiresAt: Date.now() + 3600_000 };
+                console.log('[Admin] Registered and logged in as', ADMIN_USER);
+                return regData.access_token;
+            }
+            console.error('[Admin] Registration failed:', regData.errcode);
+        } catch (err) {
+            console.error('[Admin] Shared secret registration error:', err);
+        }
+    } else {
+        console.error('[Admin] No REGISTRATION_SHARED_SECRET configured');
+    }
+    
     return null;
 }
 

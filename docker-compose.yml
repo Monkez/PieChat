@@ -41,6 +41,8 @@ services:
       - MATRIX_BASE_URL=http://dendrite:8008
       - CORS_ORIGINS=${CORS_ORIGINS:-https://${DOMAIN}}
       - DEV_MATRIX_PASSWORD=${DEV_MATRIX_PASSWORD:-}
+      - REGISTRATION_SHARED_SECRET=${REGISTRATION_SHARED_SECRET:-}
+      - ADMIN_SECRET=${ADMIN_SECRET:-piechat-admin-dev}
     depends_on:
       dendrite:
         condition: service_healthy
