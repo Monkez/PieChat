@@ -12,6 +12,7 @@ export function CallOverlay() {
     const { handleStartCall, handleAcceptCall, handleHangup, toggleMute, toggleCamera } = useWebRTC();
     const localVideoRef = useRef<HTMLVideoElement>(null);
     const remoteVideoRef = useRef<HTMLVideoElement>(null);
+    const remoteAudioRef = useRef<HTMLAudioElement>(null);
 
     // Mute / camera state
     const [isMuted, setIsMuted] = useState(false);
@@ -58,6 +59,10 @@ export function CallOverlay() {
     useEffect(() => {
         if (remoteVideoRef.current && remoteStream) {
             remoteVideoRef.current.srcObject = remoteStream;
+        }
+        // Always bind audio element for voice
+        if (remoteAudioRef.current && remoteStream) {
+            remoteAudioRef.current.srcObject = remoteStream;
         }
     }, [remoteStream]);
 
@@ -107,6 +112,10 @@ export function CallOverlay() {
     return (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-zinc-950/90 backdrop-blur-md animate-in fade-in duration-300">
             <div className="relative flex h-full w-full max-w-4xl flex-col items-center justify-center p-6 lg:h-[80vh] lg:rounded-3xl lg:border lg:border-white/10 lg:bg-zinc-900/40 lg:shadow-2xl overflow-hidden">
+
+                {/* Hidden audio element — plays remote audio for ALL call types */}
+                {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                <audio ref={remoteAudioRef} autoPlay playsInline />
 
                 {/* Remote Video / Placeholder */}
                 <div className="relative flex-1 w-full bg-zinc-800 rounded-2xl overflow-hidden flex items-center justify-center">

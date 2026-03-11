@@ -34,6 +34,7 @@ export function useWebRTC() {
             localStream.current = null;
         }
         pendingCandidates.current = [];
+        processedEventIds.current.clear();
         setStream(null);
         setRemoteStream(null);
     }, [setStream, setRemoteStream]);
@@ -44,76 +45,111 @@ export function useWebRTC() {
         }
     }, [status, cleanup]);
 
-    // ─── Get local media ────────────────────────────────
+    // ─── Get local media (always get audio + video based on CURRENT store type) ──
     const initLocalStream = useCallback(async () => {
+        // Read type from store directly to avoid stale closure
+        const callType = useCallStore.getState().type;
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({
-                audio: true,
-                video: type === 'video',
-            });
+            const constraints: MediaStreamConstraints = {
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true,
+                },
+                video: callType === 'video' ? {
+                    width: { ideal: 640 },
+                    height: { ideal: 480 },
+                    frameRate: { ideal: 24 },
+                } : false,
+            };
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
             localStream.current = stream;
             setStream(stream);
+            console.log('[Call] Got local stream: audio tracks =', stream.getAudioTracks().length, ', video tracks =', stream.getVideoTracks().length);
             return stream;
         } catch (err) {
             console.error('[Call] Failed to get user media:', err);
             alert('Không thể truy cập camera/microphone. Vui lòng cấp quyền.');
             return null;
         }
-    }, [type, setStream]);
+    }, [setStream]);
 
     // ─── Create peer connection ─────────────────────────
     const createPeerConnection = useCallback((stream: MediaStream) => {
         const pc = new RTCPeerConnection(ICE_SERVERS);
 
+        // Add ALL tracks (audio + video)
         stream.getTracks().forEach(track => {
+            console.log('[Call] Adding track:', track.kind, track.label, 'enabled:', track.enabled);
             pc.addTrack(track, stream);
         });
 
         pc.ontrack = (event) => {
-            console.log('[Call] Remote track received:', event.streams.length, 'streams');
+            console.log('[Call] Remote track received:', event.track.kind, 'streams:', event.streams.length);
             if (event.streams && event.streams[0]) {
-                setRemoteStream(event.streams[0]);
+                useCallStore.getState().setRemoteStream(event.streams[0]);
+            } else {
+                // Fallback: create stream from track
+                const remoteStream = new MediaStream([event.track]);
+                useCallStore.getState().setRemoteStream(remoteStream);
             }
         };
 
         pc.onicecandidate = (event) => {
-            const currentRoomId = useCallStore.getState().roomId;
-            const currentCallId = useCallStore.getState().callId;
-            if (event.candidate && currentRoomId && currentCallId) {
-                void matrixService.sendCallEvent(currentRoomId, currentCallId, 'm.call.candidates', {
+            const cRoomId = useCallStore.getState().roomId;
+            const cCallId = useCallStore.getState().callId;
+            if (event.candidate && cRoomId && cCallId) {
+                // Send candidate immediately
+                matrixService.sendCallEvent(cRoomId, cCallId, 'm.call.candidates', {
                     candidates: [{
                         candidate: event.candidate.candidate,
                         sdpMid: event.candidate.sdpMid,
                         sdpMLineIndex: event.candidate.sdpMLineIndex,
                     }]
-                });
+                }).catch(() => {});
+            }
+        };
+
+        pc.oniceconnectionstatechange = () => {
+            console.log('[Call] ICE state:', pc.iceConnectionState);
+            if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+                console.log('[Call] ICE connected!');
             }
         };
 
         pc.onconnectionstatechange = () => {
             console.log('[Call] Connection state:', pc.connectionState);
-            if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
-                console.warn('[Call] Connection lost');
+            if (pc.connectionState === 'failed') {
+                console.warn('[Call] Connection failed');
             }
         };
 
         peerConnection.current = pc;
         return pc;
-    }, [setRemoteStream]);
+    }, []);
 
     // ─── Start outgoing call ────────────────────────────
     const handleStartCall = useCallback(async () => {
         const stream = await initLocalStream();
-        const currentRoomId = useCallStore.getState().roomId;
-        const currentCallId = useCallStore.getState().callId;
-        if (!stream || !currentRoomId || !currentCallId) return;
+        const cRoomId = useCallStore.getState().roomId;
+        const cCallId = useCallStore.getState().callId;
+        if (!stream || !cRoomId || !cCallId) return;
 
         const pc = createPeerConnection(stream);
-        const offerSdp = await pc.createOffer();
+
+        // Force audio & video transceivers
+        if (stream.getAudioTracks().length > 0) {
+            pc.addTransceiver('audio', { direction: 'sendrecv' });
+        }
+
+        const offerSdp = await pc.createOffer({
+            offerToReceiveAudio: true,
+            offerToReceiveVideo: useCallStore.getState().type === 'video',
+        });
         await pc.setLocalDescription(offerSdp);
 
-        console.log('[Call] Sending invite for', currentCallId);
-        void matrixService.sendCallEvent(currentRoomId, currentCallId, 'm.call.invite', {
+        console.log('[Call] Sending invite for', cCallId);
+        await matrixService.sendCallEvent(cRoomId, cCallId, 'm.call.invite', {
             offer: { sdp: offerSdp.sdp, type: 'offer' },
             lifetime: 30000,
         });
@@ -121,17 +157,21 @@ export function useWebRTC() {
 
     // ─── Accept incoming call ───────────────────────────
     const handleAcceptCall = useCallback(async () => {
+        // Immediately transition to active state for faster UI feedback
+        acceptCall();
+        callSound.stop();
+
         const stream = await initLocalStream();
-        const currentRoomId = useCallStore.getState().roomId;
-        const currentCallId = useCallStore.getState().callId;
+        const cRoomId = useCallStore.getState().roomId;
+        const cCallId = useCallStore.getState().callId;
         const currentOffer = useCallStore.getState().offer;
-        if (!stream || !currentRoomId || !currentCallId || !currentOffer) return;
+        if (!stream || !cRoomId || !cCallId || !currentOffer) return;
 
         const pc = createPeerConnection(stream);
         const sdp = currentOffer.offer || currentOffer;
         await pc.setRemoteDescription(new RTCSessionDescription(sdp));
 
-        // Apply any pending ICE candidates that arrived before we set remote description
+        // Apply any pending ICE candidates that arrived before remote description
         for (const c of pendingCandidates.current) {
             await pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {});
         }
@@ -140,26 +180,25 @@ export function useWebRTC() {
         const answerSdp = await pc.createAnswer();
         await pc.setLocalDescription(answerSdp);
 
-        console.log('[Call] Sending answer for', currentCallId);
-        void matrixService.sendCallEvent(currentRoomId, currentCallId, 'm.call.answer', {
+        console.log('[Call] Sending answer for', cCallId);
+        await matrixService.sendCallEvent(cRoomId, cCallId, 'm.call.answer', {
             answer: { sdp: answerSdp.sdp, type: 'answer' },
         });
-        acceptCall();
     }, [initLocalStream, createPeerConnection, acceptCall]);
 
     // ─── Hang up / Decline ──────────────────────────────
     const handleHangup = useCallback(() => {
-        const currentRoomId = useCallStore.getState().roomId;
-        const currentCallId = useCallStore.getState().callId;
-        const currentStatus = useCallStore.getState().status;
-        // Always cleanup and end call first, then try to send hangup event
+        const cRoomId = useCallStore.getState().roomId;
+        const cCallId = useCallStore.getState().callId;
+        const cStatus = useCallStore.getState().status;
+        // Stop sounds and cleanup immediately
         callSound.stop();
         cleanup();
         useCallStore.getState().endCall();
-        // Send hangup event in background (don't block UI)
-        if (currentRoomId && currentCallId) {
-            matrixService.sendCallEvent(currentRoomId, currentCallId, 'm.call.hangup', {
-                reason: currentStatus === 'incoming' ? 'user_busy' : 'user_hangup',
+        // Send hangup in background
+        if (cRoomId && cCallId) {
+            matrixService.sendCallEvent(cRoomId, cCallId, 'm.call.hangup', {
+                reason: cStatus === 'incoming' ? 'user_busy' : 'user_hangup',
             }).catch(() => {});
         }
     }, [cleanup]);
@@ -188,37 +227,43 @@ export function useWebRTC() {
         return false;
     }, []);
 
-    // ─── Poll for remote call events ────────────────────
+    // ─── Poll for remote call events (fast polling) ─────
     useEffect(() => {
         if (status === 'none') return;
-        const currentCallId = useCallStore.getState().callId;
-        if (!currentCallId) return;
+        const cCallId = useCallStore.getState().callId;
+        if (!cCallId) return;
 
-        const pollInterval = setInterval(() => {
+        const processEvents = () => {
             const callEvents = matrixService.getLastCallEvents();
             const myUserId = typeof localStorage !== 'undefined' ? localStorage.getItem('matrix_user_id') : null;
-            const currentStatus = useCallStore.getState().status;
+            const cStatus = useCallStore.getState().status;
 
             for (const event of callEvents) {
-                // Skip own events
                 if (event.sender === myUserId) continue;
-                // Skip already processed
                 if (processedEventIds.current.has(event.event_id)) continue;
 
                 const eventCallId = event.content.call_id as string;
-                if (eventCallId !== currentCallId) continue;
+                if (eventCallId !== cCallId) continue;
 
                 processedEventIds.current.add(event.event_id);
 
                 // Handle remote answer (we are the caller)
-                if (event.type === 'm.call.answer' && (currentStatus === 'dialing' || currentStatus === 'active')) {
+                if (event.type === 'm.call.answer') {
                     const pc = peerConnection.current;
                     if (pc && pc.signalingState === 'have-local-offer') {
                         const answerSdp = event.content.answer;
-                        void pc.setRemoteDescription(new RTCSessionDescription(answerSdp as RTCSessionDescriptionInit)).then(() => {
-                            console.log('[Call] Remote answer set');
-                            useCallStore.getState().acceptCall();
-                        });
+                        pc.setRemoteDescription(new RTCSessionDescription(answerSdp as RTCSessionDescriptionInit))
+                            .then(() => {
+                                console.log('[Call] Remote answer set successfully');
+                                // Apply any buffered candidates
+                                for (const c of pendingCandidates.current) {
+                                    pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {});
+                                }
+                                pendingCandidates.current = [];
+                                useCallStore.getState().acceptCall();
+                                callSound.stop();
+                            })
+                            .catch(err => console.error('[Call] Failed to set remote answer:', err));
                     }
                 }
 
@@ -228,10 +273,9 @@ export function useWebRTC() {
                     const candidates = (event.content.candidates || []) as RTCIceCandidateInit[];
                     if (pc && pc.remoteDescription) {
                         for (const c of candidates) {
-                            void pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {});
+                            pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {});
                         }
                     } else {
-                        // Store for later if remote description not yet set
                         pendingCandidates.current.push(...candidates);
                     }
                 }
@@ -239,14 +283,19 @@ export function useWebRTC() {
                 // Handle remote hangup
                 if (event.type === 'm.call.hangup') {
                     console.log('[Call] Remote hangup');
+                    callSound.stop();
                     cleanup();
-                    endCall();
+                    useCallStore.getState().endCall();
                 }
             }
-        }, 1000); // Poll faster for better responsiveness
+        };
+
+        // Poll immediately, then at 500ms interval
+        processEvents();
+        const pollInterval = setInterval(processEvents, 500);
 
         return () => clearInterval(pollInterval);
-    }, [status, endCall, cleanup]);
+    }, [status, cleanup]);
 
     // Cleanup on unmount
     useEffect(() => {
