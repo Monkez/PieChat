@@ -38,6 +38,7 @@ export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
   const { currentUser, logout } = useMatrixStore();
   const { language } = useUiStore();
+  const { accent, setAccent } = useThemeStore();
   const router = useRouter();
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const [editingName, setEditingName] = useState(false);
@@ -305,7 +306,7 @@ export default function SettingsPage() {
                   </div>
                   <div className="flex gap-2">
                     {(Object.keys(ACCENT_THEMES) as AccentColor[]).map((color) => {
-                      const selected = useThemeStore.getState().accent === color;
+                      const selected = accent === color;
                       const colorMap: Record<AccentColor, string> = {
                         blue: 'bg-sky-500',
                         emerald: 'bg-emerald-500',
@@ -317,7 +318,7 @@ export default function SettingsPage() {
                       return (
                         <button
                           key={color}
-                          onClick={() => useThemeStore.getState().setAccent(color)}
+                          onClick={() => setAccent(color)}
                           className={`h-7 w-7 rounded-full ${colorMap[color]} transition-all ${selected ? 'ring-2 ring-offset-2 ring-zinc-900 dark:ring-white dark:ring-offset-zinc-900 scale-110' : 'hover:scale-110'}`}
                           title={ACCENT_THEMES[color].label}
                         />
