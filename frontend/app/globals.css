@@ -3,38 +3,81 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
-  --brand-primary: #29a0f4;
-  --brand-primary-strong: #1784d8;
-  --brand-soft: #e9f6ff;
-  --accent-hue: 199; /* sky-500 default hue */
+
+  /* ─── Accent Color System ─────────────────────────── */
+  /* Default: sky/blue */
+  --accent-50: #f0f9ff;
+  --accent-100: #e0f2fe;
+  --accent-200: #bae6fd;
+  --accent-300: #7dd3fc;
+  --accent-400: #38bdf8;
+  --accent-500: #0ea5e9;
+  --accent-600: #0284c7;
+  --accent-700: #0369a1;
+  --accent-800: #075985;
+  --accent-900: #0c4a6e;
 }
 
-/* Accent color themes */
-:root[data-accent="blue"] { --accent-hue: 199; --brand-primary: #0ea5e9; --brand-primary-strong: #0284c7; --brand-soft: #e0f2fe; }
-:root[data-accent="emerald"] { --accent-hue: 160; --brand-primary: #10b981; --brand-primary-strong: #059669; --brand-soft: #d1fae5; }
-:root[data-accent="orange"] { --accent-hue: 25; --brand-primary: #f97316; --brand-primary-strong: #ea580c; --brand-soft: #ffedd5; }
-:root[data-accent="rose"] { --accent-hue: 350; --brand-primary: #f43f5e; --brand-primary-strong: #e11d48; --brand-soft: #ffe4e6; }
-:root[data-accent="violet"] { --accent-hue: 263; --brand-primary: #8b5cf6; --brand-primary-strong: #7c3aed; --brand-soft: #ede9fe; }
-:root[data-accent="amber"] { --accent-hue: 38; --brand-primary: #f59e0b; --brand-primary-strong: #d97706; --brand-soft: #fef3c7; }
+/* ─── Theme: Emerald ──────────────────────────────── */
+:root[data-accent="emerald"] {
+  --accent-50: #ecfdf5; --accent-100: #d1fae5; --accent-200: #a7f3d0;
+  --accent-300: #6ee7b7; --accent-400: #34d399; --accent-500: #10b981;
+  --accent-600: #059669; --accent-700: #047857; --accent-800: #065f46;
+  --accent-900: #064e3b;
+}
+/* ─── Theme: Orange ───────────────────────────────── */
+:root[data-accent="orange"] {
+  --accent-50: #fff7ed; --accent-100: #ffedd5; --accent-200: #fed7aa;
+  --accent-300: #fdba74; --accent-400: #fb923c; --accent-500: #f97316;
+  --accent-600: #ea580c; --accent-700: #c2410c; --accent-800: #9a3412;
+  --accent-900: #7c2d12;
+}
+/* ─── Theme: Rose ─────────────────────────────────── */
+:root[data-accent="rose"] {
+  --accent-50: #fff1f2; --accent-100: #ffe4e6; --accent-200: #fecdd3;
+  --accent-300: #fda4af; --accent-400: #fb7185; --accent-500: #f43f5e;
+  --accent-600: #e11d48; --accent-700: #be123c; --accent-800: #9f1239;
+  --accent-900: #881337;
+}
+/* ─── Theme: Violet ───────────────────────────────── */
+:root[data-accent="violet"] {
+  --accent-50: #f5f3ff; --accent-100: #ede9fe; --accent-200: #ddd6fe;
+  --accent-300: #c4b5fd; --accent-400: #a78bfa; --accent-500: #8b5cf6;
+  --accent-600: #7c3aed; --accent-700: #6d28d9; --accent-800: #5b21b6;
+  --accent-900: #4c1d95;
+}
+/* ─── Theme: Amber ────────────────────────────────── */
+:root[data-accent="amber"] {
+  --accent-50: #fffbeb; --accent-100: #fef3c7; --accent-200: #fde68a;
+  --accent-300: #fcd34d; --accent-400: #fbbf24; --accent-500: #f59e0b;
+  --accent-600: #d97706; --accent-700: #b45309; --accent-800: #92400e;
+  --accent-900: #78350f;
+}
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  /* Override Tailwind sky-* palette with accent colors */
+  --color-sky-50: var(--accent-50);
+  --color-sky-100: var(--accent-100);
+  --color-sky-200: var(--accent-200);
+  --color-sky-300: var(--accent-300);
+  --color-sky-400: var(--accent-400);
+  --color-sky-500: var(--accent-500);
+  --color-sky-600: var(--accent-600);
+  --color-sky-700: var(--accent-700);
+  --color-sky-800: var(--accent-800);
+  --color-sky-900: var(--accent-900);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
     --background: #060b12;
     --foreground: #e8f3ff;
-    --brand-soft: #102030;
   }
-  :root[data-accent="emerald"] { --brand-soft: #052e16; }
-  :root[data-accent="orange"] { --brand-soft: #431407; }
-  :root[data-accent="rose"] { --brand-soft: #4c0519; }
-  :root[data-accent="violet"] { --brand-soft: #2e1065; }
-  :root[data-accent="amber"] { --brand-soft: #451a03; }
 }
 
 body {
@@ -44,7 +87,7 @@ body {
 }
 
 ::selection {
-  background: color-mix(in srgb, var(--brand-primary) 35%, white);
+  background: color-mix(in srgb, var(--accent-500) 35%, white);
   color: #03101c;
 }
 
@@ -76,44 +119,16 @@ body {
   }
 }
 
-/* ─── Accent Color System ─────────────────────────────────── */
-/* These utility classes adapt to the chosen accent color */
-
-/* Sent message bubble */
-.accent-bubble {
-  background: var(--brand-primary) !important;
-}
-.accent-bubble-hover:hover {
-  background: var(--brand-primary-strong) !important;
-}
-
-/* Accent text */
-.accent-text {
-  color: var(--brand-primary) !important;
-}
-.accent-text-muted {
-  color: color-mix(in srgb, var(--brand-primary) 70%, transparent) !important;
-}
-
-/* Accent background soft */
+/* ─── Utility Classes ─────────────────────────────── */
 .accent-bg-soft {
-  background: var(--brand-soft) !important;
+  background: var(--accent-100) !important;
 }
 .accent-bg {
-  background: var(--brand-primary) !important;
+  background: var(--accent-500) !important;
 }
-
-/* Accent border */
+.accent-text {
+  color: var(--accent-500) !important;
+}
 .accent-border {
-  border-color: var(--brand-primary) !important;
-}
-
-/* Accent ring */
-.accent-ring {
-  --tw-ring-color: var(--brand-primary) !important;
-}
-
-/* Gradient */
-.accent-gradient {
-  background: linear-gradient(135deg, var(--brand-primary), var(--brand-primary-strong)) !important;
+  border-color: var(--accent-500) !important;
 }
