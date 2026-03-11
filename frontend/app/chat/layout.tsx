@@ -876,17 +876,6 @@ export default function ChatLayout({
     )}>
       {/* Desktop: Vertical Navigation Rail (left side) */}
       <nav className="hidden lg:flex w-16 flex-col items-center py-4 text-white z-40 shrink-0" style={{ background: 'var(--accent-600)' }}>
-        <div className="mb-6">
-          <div className="h-12 w-12 overflow-hidden rounded-full border-2 border-white/20 shadow-sm">
-            {currentUser?.avatarUrl ? (
-              <Image src={currentUser.avatarUrl} alt="Avatar" width={48} height={48} className="h-full w-full object-cover" />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center bg-sky-400 font-bold text-lg">
-                {(currentUser?.username || 'U').charAt(0).toUpperCase()}
-              </div>
-            )}
-          </div>
-        </div>
 
         <div className="flex flex-1 flex-col gap-4">
           <button

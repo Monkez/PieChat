@@ -1506,6 +1506,13 @@ class MatrixService {
               duration = Number(folderInfo.fileCount || 0); // reuse duration for file count
               fileSize = Number(folderInfo.totalSize || 0);
             }
+            // Extract download URL from the message url field
+            const folderUrl = event.content?.url as string | undefined;
+            if (folderUrl) {
+              fileUrl = folderUrl.startsWith('mxc://')
+                ? `${this.baseUrl}/_matrix/media/v3/download/${folderUrl.slice(6)}`
+                : folderUrl;
+            }
             content = content || `📁 ${fileName}`;
           }
 
