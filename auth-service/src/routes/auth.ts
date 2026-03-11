@@ -511,6 +511,109 @@ router.post('/register', async (req: Request, res: Response) => {
     }
 });
 
+// ─── Forgot Password OTP Storage ─────────────────────────
+const pendingResets = new Map<string, { code: string; phone: string; matrixUsername: string; expiresAt: number }>();
+
+// ─── POST /auth/forgot-password — Send OTP for password reset ──
+router.post('/forgot-password', async (req: Request, res: Response) => {
+    const { phone: rawPhone } = req.body as { phone?: string };
+    const phone = normalizePhone(String(rawPhone || ''));
+    if (!phone || phone.length < 8) {
+        res.status(400).json({ error: 'Số điện thoại không hợp lệ' });
+        return;
+    }
+
+    // Rate limit
+    const otpLimit = canRequestOtp(phone);
+    if (!otpLimit.allowed) {
+        res.status(429).json({ error: 'Bạn đã yêu cầu OTP quá nhiều. Vui lòng thử lại sau.', retryAfterSeconds: toRetrySeconds(otpLimit.retryAfterMs) });
+        return;
+    }
+
+    // Generate OTP — 6 digits
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const matrixUsername = resolveMatrixUsername(phone);
+
+    pendingResets.set(phone, {
+        code,
+        phone,
+        matrixUsername,
+        expiresAt: Date.now() + 5 * 60 * 1000, // 5 min
+    });
+    registerOtpRequest(phone);
+
+    try {
+        await sendOtpSms(phone, code);
+    } catch {
+        res.status(502).json({ error: 'Không gửi được OTP, vui lòng thử lại sau.' });
+        return;
+    }
+
+    console.log(`[ForgotPassword] OTP sent to ${phone}: ${code}`);
+    res.json({ success: true, message: 'Mã OTP đã được gửi đến số điện thoại của bạn' });
+});
+
+// ─── POST /auth/reset-password — Verify OTP & reset password ──
+router.post('/reset-password', async (req: Request, res: Response) => {
+    const { phone: rawPhone, otp, newPassword } = req.body as { phone?: string; otp?: string; newPassword?: string };
+    const phone = normalizePhone(String(rawPhone || ''));
+    const code = String(otp || '');
+    const pwd = String(newPassword || '');
+
+    if (!phone || !code || !pwd) {
+        res.status(400).json({ error: 'Thiếu thông tin' });
+        return;
+    }
+    if (pwd.length < 6) {
+        res.status(400).json({ error: 'Mật khẩu mới phải ít nhất 6 ký tự' });
+        return;
+    }
+
+    const pending = pendingResets.get(phone);
+    if (!pending || pending.expiresAt < Date.now()) {
+        pendingResets.delete(phone);
+        res.status(400).json({ error: 'Mã OTP đã hết hạn hoặc không tồn tại. Hãy yêu cầu lại.' });
+        return;
+    }
+
+    if (pending.code !== code) {
+        res.status(400).json({ error: 'Mã OTP không đúng' });
+        return;
+    }
+
+    // OTP is valid, reset password
+    pendingResets.delete(phone);
+
+    const serverName = process.env.DOMAIN || 'localhost';
+    const userId = `@${pending.matrixUsername}:${serverName}`;
+
+    try {
+        const token = await getAdminToken();
+        if (!token) {
+            res.status(500).json({ error: 'Không thể kết nối admin server' });
+            return;
+        }
+
+        const resetRes = await fetch(`${matrixBaseUrl}/_dendrite/admin/resetPassword/${encodeURIComponent(userId)}`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: pwd }),
+        });
+
+        if (resetRes.ok) {
+            console.log(`[ForgotPassword] Password reset for ${userId}`);
+            res.json({ success: true, message: 'Đổi mật khẩu thành công! Bạn có thể đăng nhập ngay.' });
+        } else {
+            const data = (await resetRes.json()) as { error?: string };
+            console.error('[ForgotPassword] Reset failed:', data);
+            res.status(500).json({ error: data.error || 'Đổi mật khẩu thất bại' });
+        }
+    } catch (err) {
+        console.error('[ForgotPassword] Error:', err);
+        res.status(500).json({ error: 'Lỗi server' });
+    }
+});
+
 // ─── GET /auth/link-preview — Fetch URL metadata ─────────
 router.get('/link-preview', async (req: Request, res: Response) => {
     const url = String(req.query.url || '');

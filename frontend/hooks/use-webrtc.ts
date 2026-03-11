@@ -9,7 +9,29 @@ const ICE_SERVERS: RTCConfiguration = {
     iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun.relay.metered.ca:80' },
+        {
+            urls: 'turn:a.relay.metered.ca:80',
+            username: 'e8dd65b92f6dde62f5d3b437',
+            credential: 'uWdWNmkhvyqTEswO',
+        },
+        {
+            urls: 'turn:a.relay.metered.ca:80?transport=tcp',
+            username: 'e8dd65b92f6dde62f5d3b437',
+            credential: 'uWdWNmkhvyqTEswO',
+        },
+        {
+            urls: 'turn:a.relay.metered.ca:443',
+            username: 'e8dd65b92f6dde62f5d3b437',
+            credential: 'uWdWNmkhvyqTEswO',
+        },
+        {
+            urls: 'turns:a.relay.metered.ca:443?transport=tcp',
+            username: 'e8dd65b92f6dde62f5d3b437',
+            credential: 'uWdWNmkhvyqTEswO',
+        },
     ],
+    iceCandidatePoolSize: 10,
 };
 
 export function useWebRTC() {

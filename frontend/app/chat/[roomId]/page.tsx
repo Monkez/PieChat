@@ -867,7 +867,7 @@ export default function RoomPage() {
       });
     };
     fetchPresence();
-    const interval = setInterval(fetchPresence, 30000);
+    const interval = setInterval(fetchPresence, 15000);
     return () => clearInterval(interval);
   }, [room?.type, room?.members, currentUser?.id]);
 

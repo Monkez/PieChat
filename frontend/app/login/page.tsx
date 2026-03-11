@@ -290,6 +290,11 @@ export default function LoginPage() {
                         placeholder="••••••••"
                       />
                     </div>
+                    <div className="text-right mt-1">
+                      <Link href="/forgot-password" className="text-xs font-medium text-sky-700 hover:text-sky-600 dark:text-sky-300 dark:hover:text-sky-200">
+                        {t(language, 'loginForgotPassword' as any) || 'Quên mật khẩu?'}
+                      </Link>
+                    </div>
                   </div>
                 </>
               ) : (
