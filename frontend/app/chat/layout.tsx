@@ -887,7 +887,8 @@ export default function ChatLayout({
             )}
             title={t(language, 'chatTabPersonal')}
           >
-            <MessageSquare className="h-6 w-6" />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/menubar-icons/conversation.png" alt="Chat" className="h-6 w-6" />
             {recentChats.some((r: any) => r.unreadCount > 0) && (
               <span className="absolute top-2 right-2 h-4 min-w-[16px] flex items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold">
                 {recentChats.reduce((acc: number, r: any) => acc + r.unreadCount, 0)}
@@ -903,7 +904,8 @@ export default function ChatLayout({
             )}
             title={t(language, 'chatTabChannels')}
           >
-            <Users className="h-6 w-6" />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/menubar-icons/group.png" alt="Channels" className="h-6 w-6" />
           </button>
 
           <button
@@ -914,7 +916,8 @@ export default function ChatLayout({
             )}
             title={t(language, 'chatTabContacts')}
           >
-            <BookUser className="h-6 w-6" />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/menubar-icons/contact.png" alt="Contacts" className="h-6 w-6" />
           </button>
 
           <button
@@ -925,7 +928,8 @@ export default function ChatLayout({
             )}
             title={t(language, 'chatTabAssistant' as any)}
           >
-            <Bot className="h-6 w-6" />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/menubar-icons/bot.png" alt="Bot" className="h-6 w-6" />
           </button>
         </div>
 

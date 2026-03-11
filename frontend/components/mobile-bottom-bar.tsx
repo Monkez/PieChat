@@ -26,6 +26,7 @@ export function MobileBottomBar({ activeSection, onSectionChange }: MobileBottom
         {
             id: 'personal' as const,
             icon: MessageSquare,
+            iconImg: '/menubar-icons/conversation.png',
             label: t(language, 'chatTabPersonal'),
             href: '/chat',
             badge: totalUnread > 0 ? totalUnread : undefined,
@@ -33,24 +34,28 @@ export function MobileBottomBar({ activeSection, onSectionChange }: MobileBottom
         {
             id: 'channels' as const,
             icon: Users,
+            iconImg: '/menubar-icons/group.png',
             label: t(language, 'chatTabChannels'),
             href: '/chat',
         },
         {
             id: 'contacts' as const,
             icon: BookUser,
+            iconImg: '/menubar-icons/contact.png',
             label: t(language, 'chatTabContacts'),
             href: '/chat',
         },
         {
             id: 'assistants' as const,
             icon: Bot,
+            iconImg: '/menubar-icons/bot.png',
             label: t(language, 'chatTabAssistant' as any),
             href: '/chat',
         },
         {
             id: 'settings' as const,
             icon: Settings,
+            iconImg: undefined as string | undefined,
             label: t(language, 'settingsTitle'),
             href: '/settings',
         },
@@ -77,7 +82,12 @@ export function MobileBottomBar({ activeSection, onSectionChange }: MobileBottom
                                 isActive ? "bg-white/20" : "hover:bg-white/10"
                             )}
                         >
-                            <Icon className="h-6 w-6" />
+                            {tab.iconImg ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={tab.iconImg} alt={tab.label} className="h-6 w-6" />
+                            ) : (
+                                <Icon className="h-6 w-6" />
+                            )}
                             <span className="text-[11px] font-medium">{tab.label}</span>
                         </Link>
                     );
@@ -98,7 +108,12 @@ export function MobileBottomBar({ activeSection, onSectionChange }: MobileBottom
                             isActive ? "bg-white/20" : "hover:bg-white/10"
                         )}
                     >
-                        <Icon className="h-6 w-6" />
+                        {tab.iconImg ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={tab.iconImg} alt={tab.label} className="h-6 w-6" />
+                        ) : (
+                            <Icon className="h-6 w-6" />
+                        )}
                         <span className="text-[11px] font-medium">{tab.label}</span>
                         {tab.badge && (
                             <span className="absolute top-0.5 right-0.5 h-[18px] min-w-[18px] flex items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold">
