@@ -44,6 +44,7 @@ interface SystemInfo {
   cpu: { model: string; cores: number; loadAvg: { '1m': number; '5m': number; '15m': number }; usagePercent: number };
   memory: { total: number; used: number; free: number; usagePercent: number };
   disk: string;
+  diskParsed?: Array<{ filesystem: string; size: string; used: string; available: string; usagePercent: number; mountedOn: string }>;
   docker: string;
   network: { interfaces: Array<{ name: string; address: string; family: string }>; traffic: string };
   os: { platform: string; release: string; hostname: string; uptime: number; arch: string };
@@ -493,7 +494,20 @@ export default function AdminPage() {
                   </div>
                   <div className="space-y-2">
                     <span className="text-xs font-medium text-zinc-500 flex items-center gap-1"><HardDrive className="h-3 w-3" /> Storage</span>
-                    <pre className="text-[9px] text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-800 rounded-lg p-2 overflow-x-auto whitespace-pre">{systemInfo.disk || 'N/A'}</pre>
+                    {systemInfo.diskParsed && systemInfo.diskParsed.length > 0 ? systemInfo.diskParsed.map((d: { mountedOn: string; usagePercent: number; used: string; size: string; available: string; filesystem: string }, i: number) => (
+                      <div key={i} className="space-y-1">
+                        <div className="flex items-center justify-between text-[10px]">
+                          <span className="font-medium text-zinc-600 dark:text-zinc-300">{d.mountedOn}</span>
+                          <span className={`font-bold ${d.usagePercent > 85 ? 'text-red-500' : d.usagePercent > 60 ? 'text-amber-500' : 'text-emerald-500'}`}>{d.usagePercent}%</span>
+                        </div>
+                        <div className="h-2 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full transition-all ${d.usagePercent > 85 ? 'bg-red-500' : d.usagePercent > 60 ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${d.usagePercent}%` }} />
+                        </div>
+                        <p className="text-[10px] text-zinc-400">{d.used} / {d.size} — Trống: {d.available}</p>
+                      </div>
+                    )) : (
+                      <pre className="text-[9px] text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-800 rounded-lg p-2 overflow-x-auto whitespace-pre">{systemInfo.disk || 'N/A'}</pre>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <span className="text-xs font-medium text-zinc-500 flex items-center gap-1"><Wifi className="h-3 w-3" /> Network</span>

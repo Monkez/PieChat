@@ -715,6 +715,7 @@ router.get('/admin/system-info', async (req: Request, res: Response) => {
 
     // Disk usage via shell
     let diskInfo = '';
+    const diskParsed: Array<{ filesystem: string; size: string; used: string; available: string; usagePercent: number; mountedOn: string }> = [];
     let dockerInfo = '';
     let networkTraffic = '';
     try {
@@ -725,6 +726,22 @@ router.get('/admin/system-info', async (req: Request, res: Response) => {
         try {
             const { stdout } = await execAsync('df -h / /opt 2>/dev/null || df -h /', { timeout: 5000 });
             diskInfo = stdout;
+            // Parse df output into structured data
+            const lines = stdout.trim().split('\n').slice(1); // skip header
+            for (const line of lines) {
+                const parts = line.trim().split(/\s+/);
+                if (parts.length >= 6) {
+                    const usePct = parseInt(parts[4]?.replace('%', '') || '0');
+                    diskParsed.push({
+                        filesystem: parts[0],
+                        size: parts[1],
+                        used: parts[2],
+                        available: parts[3],
+                        usagePercent: usePct,
+                        mountedOn: parts[5],
+                    });
+                }
+            }
         } catch { /* skip */ }
         
         try {
@@ -752,6 +769,7 @@ router.get('/admin/system-info', async (req: Request, res: Response) => {
             usagePercent: Math.round((usedMem / totalMem) * 100),
         },
         disk: diskInfo,
+        diskParsed,
         docker: dockerInfo,
         network: {
             interfaces: networkInfo,

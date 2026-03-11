@@ -144,10 +144,11 @@ export function getRoomMemberships(): RoomMembership[] {
         const memberships = db.prepare(`SELECT * FROM "${memberTable.name}"`).all() as Record<string, unknown>[];
         db.close();
 
+        const MEMBERSHIP_MAP: Record<string, string> = { '1': 'invite', '2': 'join', '3': 'leave', '4': 'ban', '5': 'knock' };
         return memberships.map(m => ({
             room_id: roomMap.get(Number(m.room_nid)) || String(m.room_nid || ''),
             user_id: userMap.get(Number(m.target_nid || m.event_state_key_nid)) || String(m.target_nid || ''),
-            membership: String(m.membership_nid) === '1' ? 'join' : String(m.membership_nid) === '2' ? 'leave' : String(m.membership_nid) === '3' ? 'invite' : String(m.membership_nid) === '4' ? 'ban' : String(m.membership_nid || ''),
+            membership: MEMBERSHIP_MAP[String(m.membership_nid)] || String(m.membership_nid || ''),
         }));
     } catch (err) {
         console.error('[DendriteDB] Error getting memberships:', err);
