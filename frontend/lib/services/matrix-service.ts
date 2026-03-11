@@ -674,9 +674,15 @@ class MatrixService {
     }
   }
 
-  async showNotification(title: string, options?: NotificationOptions) {
+  async showNotification(title: string, options?: NotificationOptions & { data?: any }) {
     try {
-      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+      if (typeof window === 'undefined' || !('Notification' in window) || Notification.permission !== 'granted') return;
+
+      // Prefer SW notification (supports notificationclick → open room)
+      if ('serviceWorker' in navigator) {
+        const reg = await navigator.serviceWorker.ready;
+        await reg.showNotification(title, options);
+      } else {
         new Notification(title, options);
       }
     } catch {

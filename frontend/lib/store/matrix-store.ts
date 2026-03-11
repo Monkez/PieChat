@@ -268,8 +268,9 @@ export const useMatrixStore = create<MatrixState>((set, get) => ({
 
           void matrixService.showNotification(`${senderName} (${roomName})`, {
             body: nextRoom.lastMessage?.content,
-            icon: '/icons/icon-192.png'
-          });
+            icon: '/icons/icon-192.png',
+            data: { url: `/chat/${encodeURIComponent(nextRoom.id)}` },
+          } as any);
         }
 
         // AUTO-READ if user is already in this room
