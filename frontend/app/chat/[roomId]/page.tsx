@@ -107,6 +107,7 @@ export default function RoomPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [droppedFiles, setDroppedFiles] = useState<File[]>([]);
   const [dropCaption, setDropCaption] = useState('');
+  const [droppedFolderName, setDroppedFolderName] = useState<string | null>(null);
   const dragCounterRef = useRef(0);
 
   useEffect(() => {
@@ -891,28 +892,72 @@ export default function RoomPage() {
           setIsDragging(false);
         }
       }}
-      onDrop={(e) => {
+      onDrop={async (e) => {
         e.preventDefault();
         e.stopPropagation();
         dragCounterRef.current = 0;
         setIsDragging(false);
+
         const items = e.dataTransfer.items;
         const fileList: File[] = [];
-        if (items) {
-          for (let i = 0; i < items.length; i++) {
-            const item = items[i];
-            if (item.kind === 'file') {
-              const file = item.getAsFile();
-              if (file) fileList.push(file);
+        let folderName: string | null = null;
+
+        // Helper to read all files from a directory entry recursively
+        const readEntry = (entry: FileSystemEntry): Promise<File[]> => {
+          return new Promise((resolve) => {
+            if (entry.isFile) {
+              (entry as FileSystemFileEntry).file(
+                (file) => {
+                  // Preserve relative path
+                  Object.defineProperty(file, 'webkitRelativePath', { value: entry.fullPath.slice(1), writable: false });
+                  resolve([file]);
+                },
+                () => resolve([])
+              );
+            } else if (entry.isDirectory) {
+              const dirReader = (entry as FileSystemDirectoryEntry).createReader();
+              const readAll = (allEntries: FileSystemEntry[] = []): Promise<FileSystemEntry[]> => {
+                return new Promise((res) => {
+                  dirReader.readEntries((entries) => {
+                    if (entries.length === 0) res(allEntries);
+                    else readAll([...allEntries, ...entries]).then(res);
+                  }, () => res(allEntries));
+                });
+              };
+              readAll().then(async (entries) => {
+                const results = await Promise.all(entries.map(readEntry));
+                resolve(results.flat());
+              });
+            } else {
+              resolve([]);
             }
+          });
+        };
+
+        if (items) {
+          const entries: FileSystemEntry[] = [];
+          for (let i = 0; i < items.length; i++) {
+            const entry = items[i].webkitGetAsEntry?.();
+            if (entry) entries.push(entry);
+          }
+          // Check if any entry is a directory
+          const hasDir = entries.some(e => e.isDirectory);
+          if (hasDir && entries.length === 1 && entries[0].isDirectory) {
+            folderName = entries[0].name;
+          }
+          for (const entry of entries) {
+            const files = await readEntry(entry);
+            fileList.push(...files);
           }
         } else {
           for (let i = 0; i < e.dataTransfer.files.length; i++) {
             fileList.push(e.dataTransfer.files[i]);
           }
         }
+
         if (fileList.length > 0) {
           setDroppedFiles(fileList);
+          setDroppedFolderName(folderName);
           setDropCaption('');
         }
       }}
@@ -1806,9 +1851,9 @@ export default function RoomPage() {
           <div className="relative w-full max-w-md mx-4 rounded-2xl bg-white dark:bg-zinc-900 shadow-2xl border border-zinc-200 dark:border-zinc-700 overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-700 flex items-center justify-between">
               <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
-                Gửi {droppedFiles.length} tệp
+                {droppedFolderName ? `📁 ${droppedFolderName} (${droppedFiles.length} tệp)` : `Gửi ${droppedFiles.length} tệp`}
               </h3>
-              <button onClick={() => { setDroppedFiles([]); setDropCaption(''); }} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300">
+              <button onClick={() => { setDroppedFiles([]); setDropCaption(''); setDroppedFolderName(null); }} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300">
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -1840,12 +1885,14 @@ export default function RoomPage() {
                       <p className="truncate text-xs font-medium text-zinc-900 dark:text-zinc-100">{file.name}</p>
                       <p className="text-[10px] text-zinc-500">{sizeStr}</p>
                     </div>
-                    <button
-                      onClick={() => setDroppedFiles(prev => prev.filter((_, idx) => idx !== i))}
-                      className="text-zinc-400 hover:text-rose-500 shrink-0"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
+                    {!droppedFolderName && (
+                      <button
+                        onClick={() => setDroppedFiles(prev => prev.filter((_, idx) => idx !== i))}
+                        className="text-zinc-400 hover:text-rose-500 shrink-0"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -1864,9 +1911,14 @@ export default function RoomPage() {
                     e.preventDefault();
                     const caption = dropCaption.trim();
                     const files = [...droppedFiles];
-                    setDroppedFiles([]); setDropCaption('');
+                    const folderName = droppedFolderName;
+                    setDroppedFiles([]); setDropCaption(''); setDroppedFolderName(null);
                     if (caption) void handleSendMessage(caption);
-                    void handleSendFiles(files);
+                    if (folderName) {
+                      void handleSendFolder(folderName, files);
+                    } else {
+                      void handleSendFiles(files);
+                    }
                   }
                 }}
                 autoFocus
@@ -1875,8 +1927,13 @@ export default function RoomPage() {
                 <button
                   onClick={() => {
                     const files = [...droppedFiles];
-                    setDroppedFiles([]); setDropCaption('');
-                    void handleSendFiles(files);
+                    const folderName = droppedFolderName;
+                    setDroppedFiles([]); setDropCaption(''); setDroppedFolderName(null);
+                    if (folderName) {
+                      void handleSendFolder(folderName, files);
+                    } else {
+                      void handleSendFiles(files);
+                    }
                   }}
                   className="flex-1 rounded-xl bg-sky-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-700 transition-colors shadow-sm"
                 >
@@ -1887,9 +1944,14 @@ export default function RoomPage() {
                     onClick={() => {
                       const caption = dropCaption.trim();
                       const files = [...droppedFiles];
-                      setDroppedFiles([]); setDropCaption('');
+                      const folderName = droppedFolderName;
+                      setDroppedFiles([]); setDropCaption(''); setDroppedFolderName(null);
                       void handleSendMessage(caption);
-                      void handleSendFiles(files);
+                      if (folderName) {
+                        void handleSendFolder(folderName, files);
+                      } else {
+                        void handleSendFiles(files);
+                      }
                     }}
                     className="flex-1 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 transition-colors shadow-sm"
                   >
