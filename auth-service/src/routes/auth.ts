@@ -676,7 +676,7 @@ router.post('/admin/delete-user', async (req: Request, res: Response) => {
     
     // Step 1: Evacuate user from all rooms
     try {
-        const evacRes = await fetch(`${matrixBaseUrl}/_dendrite/admin/evacuateUser/${encodeURIComponent(userId)}`, {
+        const evacRes = await fetch(`${matrixBaseUrl}/_dendrite/admin/evacuateUser/${userId}`, {
             method: 'POST',
             headers: { Authorization: `Bearer ${token}` },
         });
@@ -690,7 +690,7 @@ router.post('/admin/delete-user', async (req: Request, res: Response) => {
     
     // Step 2: Deactivate account
     try {
-        const deactRes = await fetch(`${matrixBaseUrl}/_matrix/client/v3/admin/deactivate/${encodeURIComponent(userId)}`, {
+        const deactRes = await fetch(`${matrixBaseUrl}/_matrix/client/v3/admin/deactivate/${userId}`, {
             method: 'POST',
             headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ erase: true }),
@@ -717,7 +717,7 @@ router.post('/admin/reset-password', async (req: Request, res: Response) => {
     if (!token) { res.status(500).json({ error: 'Cannot get admin token' }); return; }
     
     try {
-        const resetRes = await fetch(`${matrixBaseUrl}/_dendrite/admin/resetPassword/${encodeURIComponent(userId)}`, {
+        const resetRes = await fetch(`${matrixBaseUrl}/_dendrite/admin/resetPassword/${userId}`, {
             method: 'POST',
             headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ password: newPassword }),
@@ -745,13 +745,20 @@ router.post('/admin/delete-room', async (req: Request, res: Response) => {
     if (!token) { res.status(500).json({ error: 'Cannot get admin token' }); return; }
     
     try {
-        const evacRes = await fetch(`${matrixBaseUrl}/_dendrite/admin/evacuateRoom/${encodeURIComponent(roomId)}`, {
+        const evacRes = await fetch(`${matrixBaseUrl}/_dendrite/admin/evacuateRoom/${roomId}`, {
             method: 'POST',
             headers: { Authorization: `Bearer ${token}` },
         });
         if (evacRes.ok) {
             const data = (await evacRes.json()) as { affected?: string[] };
-            console.log(`[Admin] Room ${roomId} evacuated, ${data.affected?.length || 0} users removed`);
+            // Also try to purge room data
+            try {
+                await fetch(`${matrixBaseUrl}/_dendrite/admin/purgeRoom/${roomId}`, {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+            } catch { /* purge is best-effort */ }
+            console.log(`[Admin] Room ${roomId} evacuated + purged, ${data.affected?.length || 0} users removed`);
             res.json({ success: true, roomId, affected: data.affected?.length || 0 });
         } else {
             const data = (await evacRes.json()) as { error?: string };

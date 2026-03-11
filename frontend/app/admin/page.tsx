@@ -238,7 +238,7 @@ export default function AdminPage() {
       const data = (await res.json()) as { success?: boolean; details?: string[]; error?: string };
       if (data.success) {
         showNotice('success', `Đã xóa ${userId}: ${data.details?.join(', ')}`);
-        void loadUsers();
+        setUsers(prev => prev.filter(u => u.name !== userId));
       } else {
         showNotice('error', data.error || 'Xóa thất bại');
       }
@@ -257,7 +257,7 @@ export default function AdminPage() {
       const data = (await res.json()) as { success?: boolean; affected?: number; error?: string };
       if (data.success) {
         showNotice('success', `Đã xóa phòng, ${data.affected || 0} thành viên bị đuổi`);
-        void loadRooms();
+        setRooms(prev => prev.filter(r => r.room_id !== roomId));
       } else {
         showNotice('error', data.error || 'Xóa phòng thất bại');
       }
