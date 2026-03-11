@@ -674,6 +674,17 @@ class MatrixService {
     }
   }
 
+  async fetchCurrentProfile(): Promise<User | null> {
+    const userId = this.getCurrentUserId();
+    if (!userId) return null;
+    try {
+      const profile = await this.fetchProfileUser(userId);
+      return this.userFromId(userId, undefined, profile?.displayname);
+    } catch {
+      return null;
+    }
+  }
+
   async showNotification(title: string, options?: NotificationOptions & { data?: any }) {
     try {
       if (typeof window === 'undefined' || !('Notification' in window) || Notification.permission !== 'granted') return;

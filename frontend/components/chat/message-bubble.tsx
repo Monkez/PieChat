@@ -145,14 +145,30 @@ function FileAttachment({ msg, isMe }: { msg: Message; isMe: boolean }) {
     return '📎';
   };
 
+  const handleDownload = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!msg.fileUrl) return;
+    try {
+      const resp = await fetch(msg.fileUrl);
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = msg.fileName || 'file';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 100);
+    } catch {
+      // Fallback: open in new tab
+      window.open(msg.fileUrl, '_blank');
+    }
+  };
+
   return (
-    <a
-      href={msg.fileUrl}
-      target="_blank"
-      rel="noopener noreferrer"
-      download={msg.fileName}
+    <button
+      onClick={handleDownload}
       className={cn(
-        "flex items-center gap-3 rounded-xl p-2 transition-colors min-w-[200px]",
+        "flex items-center gap-3 rounded-xl p-2 transition-colors min-w-[200px] text-left",
         !isMe && "bg-zinc-50 hover:bg-zinc-100 dark:bg-zinc-700/50 dark:hover:bg-zinc-700"
       )}
     >
@@ -177,7 +193,7 @@ function FileAttachment({ msg, isMe }: { msg: Message; isMe: boolean }) {
         </p>
       </div>
       <Download className={cn("h-4 w-4 shrink-0", isMe ? "text-sky-600/70 dark:text-sky-400" : "text-zinc-400")} />
-    </a>
+    </button>
   );
 }
 
@@ -196,19 +212,29 @@ function FolderAttachment({ msg, isMe }: { msg: Message; isMe: boolean }) {
   const isUploading = msg.status === 'sending';
   const progress = msg.uploadProgress || 0;
 
-  const Wrapper = msg.fileUrl ? 'a' : 'div';
-  const wrapperProps = msg.fileUrl ? {
-    href: msg.fileUrl,
-    target: '_blank' as const,
-    rel: 'noopener noreferrer',
-    download: `${folderName}.zip`,
-  } : {};
+  const handleDownload = async () => {
+    if (!msg.fileUrl) return;
+    try {
+      const resp = await fetch(msg.fileUrl);
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${folderName}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 100);
+    } catch {
+      window.open(msg.fileUrl, '_blank');
+    }
+  };
 
   return (
-    <Wrapper
-      {...wrapperProps}
+    <div
+      onClick={msg.fileUrl && !isUploading ? handleDownload : undefined}
       className={cn(
         "flex flex-col rounded-xl transition-colors min-w-[200px] overflow-hidden",
+        msg.fileUrl && !isUploading && "cursor-pointer",
         !isMe && "bg-zinc-50 hover:bg-zinc-100 dark:bg-zinc-700/50 dark:hover:bg-zinc-700"
       )}
     >
@@ -251,7 +277,7 @@ function FolderAttachment({ msg, isMe }: { msg: Message; isMe: boolean }) {
           />
         </div>
       )}
-    </Wrapper>
+    </div>
   );
 }
 
@@ -787,10 +813,13 @@ export function MessageBubble({
 
             {activeMenuId === msg.id && (
               <div className={cn(
-                "absolute z-[100] mt-2 w-44 overflow-hidden rounded-2xl border border-zinc-200 bg-white/95 p-1.5 shadow-2xl ring-1 ring-black/5 backdrop-blur-md dark:border-zinc-700 dark:bg-zinc-800/95 animate-in fade-in zoom-in-95 duration-200",
-                isMe ? "right-0 origin-top-right" : "left-0 origin-top-left"
+                "absolute z-[100] w-44 overflow-hidden rounded-2xl border border-zinc-200 bg-white/95 p-1.5 shadow-2xl ring-1 ring-black/5 backdrop-blur-md dark:border-zinc-700 dark:bg-zinc-800/95 animate-in fade-in zoom-in-95 duration-200",
+                showAbove
+                  ? "bottom-full mb-2 origin-bottom-right"
+                  : "top-full mt-2 origin-top-right",
+                isMe ? "right-0" : "left-0"
               )}>
-                <div className="absolute -top-3 left-0 right-0 h-3" />
+                <div className={cn("absolute left-0 right-0 h-3", showAbove ? "-bottom-3" : "-top-3")} />
                 <button onClick={() => onMenuAction('reply', msg)} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-zinc-700 hover:bg-sky-50 hover:text-sky-700 dark:text-zinc-200 dark:hover:bg-sky-900/30 dark:hover:text-sky-400 transition-all text-nowrap">
                   <Reply className="h-4 w-4" /> {t(language, 'msgReply' as any) || 'Reply'}
                 </button>

@@ -951,13 +951,19 @@ export default function ChatLayout({
           >
             <Settings className="h-6 w-6" />
           </Link>
-          <button
-            onClick={handleLogout}
-            className="p-3 rounded-xl transition-all hover:bg-white/10 text-white/80 hover:text-white"
-            title={t(language, 'settingsSignOut')}
+          <Link
+            href="/profile"
+            className="p-1 rounded-full transition-all hover:ring-2 hover:ring-white/30"
+            title="Hồ sơ cá nhân"
           >
-            <LogOut className="h-6 w-6" />
-          </button>
+            <div className="h-8 w-8 rounded-full bg-white/20 overflow-hidden flex items-center justify-center text-sm font-bold">
+              {currentUser?.avatarUrl ? (
+                <img src={currentUser.avatarUrl} alt="" className="h-full w-full object-cover" />
+              ) : (
+                (currentUser?.displayName || currentUser?.username || '?').charAt(0).toUpperCase()
+              )}
+            </div>
+          </Link>
         </div>
       </nav>
 

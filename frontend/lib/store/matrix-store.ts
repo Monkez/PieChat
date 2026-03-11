@@ -43,6 +43,7 @@ interface MatrixState {
   acceptFriendRequest: (roomId: string) => Promise<boolean>;
   declineFriendRequest: (roomId: string) => Promise<boolean>;
   unfriend: (roomId: string) => Promise<boolean>;
+  fetchCurrentUser: () => Promise<void>;
 }
 
 export const useMatrixStore = create<MatrixState>((set, get) => ({
@@ -178,6 +179,15 @@ export const useMatrixStore = create<MatrixState>((set, get) => ({
       // API failure or critical error -> assume session lost
       get().logout();
       set({ currentUser: null, isLoading: false });
+    }
+  },
+
+  fetchCurrentUser: async () => {
+    try {
+      const user = await matrixService.fetchCurrentProfile();
+      if (user) set({ currentUser: user });
+    } catch {
+      // ignore
     }
   },
 
