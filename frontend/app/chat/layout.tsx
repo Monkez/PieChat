@@ -266,9 +266,11 @@ export default function ChatLayout({
       if (room.type === 'group' && room.channelId && !joinedChannelIds.has(room.channelId)) return true;
       if (room.type !== 'dm') return false;
 
-      // In the new logic, they are personal if friendship status is 'accepted'
-      // Hide if no messages have been sent yet to keep UI clean
-      return room.friendship?.status === 'accepted' && !!room.lastMessage;
+      // Show DMs that have an accepted friendship OR have messages (backward compat)
+      if (room.friendship?.status === 'accepted') return true;
+      // Also show DMs without explicit friendship (old rooms, or missing data) if they have messages
+      if (!room.friendship && !!room.lastMessage) return true;
+      return false;
     });
   }, [recentChats, rooms, assistantRoomIds]);
 
