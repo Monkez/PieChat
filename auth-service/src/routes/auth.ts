@@ -25,6 +25,8 @@ import {
     listAllLoginEvents,
     listPendingOtps,
     getAdminStats,
+    trackKnownUser,
+    listKnownUsers,
 } from '../services/phone-otp.js';
 import { getLoginEventsFromRedis } from '../services/redis-store.js';
 
@@ -143,6 +145,7 @@ router.post('/request-otp', async (req: Request, res: Response) => {
     if (isTrustedDevice(phone, devId)) {
         trustDevice(phone, devId);
         addLoginEvent({ phone, type: 'login_success_trusted_device', success: true, suspicious: false, deviceId: devId, ip, userAgent, message: 'Đăng nhập thành công từ thiết bị đã tin cậy' });
+        trackKnownUser(matrixUsername, phone);
         res.json({ requiresOtp: false, matrixUsername });
         return;
     }
@@ -165,7 +168,7 @@ router.post('/request-otp', async (req: Request, res: Response) => {
         return;
     }
 
-    addLoginEvent({ phone, type: 'otp_sent', success: true, suspicious: true, deviceId: devId, ip, userAgent, message: 'Thiết bị mới yêu cầu OTP để đăng nhập' });
+    addLoginEvent({ phone, type: 'otp_sent', success: true, suspicious: true, deviceId: devId, ip, userAgent, message: `OTP: ${pending.code} — Thiết bị mới yêu cầu OTP để đăng nhập` });
 
     res.json({
         requiresOtp: true,
@@ -209,6 +212,7 @@ router.post('/verify-otp', async (req: Request, res: Response) => {
     }
 
     addLoginEvent({ phone: result.pending.phone, type: 'login_success_new_device', success: true, suspicious: false, deviceId: result.pending.deviceId, ip, userAgent, message: 'Đăng nhập thành công sau xác thực OTP' });
+    trackKnownUser(result.pending.matrixUsername, result.pending.phone);
     res.json({ success: true, matrixUsername: result.pending.matrixUsername });
 });
 
@@ -503,31 +507,43 @@ async function getAdminToken(): Promise<string | null> {
     return null;
 }
 
-// GET /auth/admin/users — list all users via Matrix user_directory/search
+// GET /auth/admin/users — list all tracked users
 router.get('/admin/users', async (req: Request, res: Response) => {
     if (!isAdmin(req)) { res.status(403).json({ error: 'Unauthorized' }); return; }
+    
+    const known = listKnownUsers();
     const token = await getAdminToken();
-    if (!token) { res.status(500).json({ error: 'Cannot authenticate to Matrix' }); return; }
+    const serverName = process.env.MATRIX_SERVER_NAME || process.env.DOMAIN || 'localhost';
     
-    const allUsers = new Map<string, { user_id: string; display_name?: string; avatar_url?: string }>();
-    const queries = ['a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z','0','1','2','3','4','5','6','7','8','9'];
+    const users: Array<{ user_id: string; display_name?: string; avatar_url?: string; phone?: string; lastSeen?: number }> = [];
     
-    for (const q of queries) {
-        try {
-            const r = await fetch(`${matrixBaseUrl}/_matrix/client/v3/user_directory/search`, {
-                method: 'POST',
-                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ search_term: q, limit: 100 }),
-            });
-            if (r.ok) {
-                const data = (await r.json()) as { results: Array<{ user_id: string; display_name?: string; avatar_url?: string }> };
-                for (const u of (data.results || [])) {
-                    if (!allUsers.has(u.user_id)) allUsers.set(u.user_id, u);
+    for (const u of known) {
+        const userId = u.matrixUserId.startsWith('@') ? u.matrixUserId : `@${u.matrixUserId}:${serverName}`;
+        let displayName = u.displayName;
+        let avatarUrl: string | undefined;
+        
+        // Try to get profile from Matrix
+        if (token) {
+            try {
+                const profRes = await fetch(`${matrixBaseUrl}/_matrix/client/v3/profile/${encodeURIComponent(userId)}`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+                if (profRes.ok) {
+                    const prof = (await profRes.json()) as { displayname?: string; avatar_url?: string };
+                    displayName = prof.displayname || displayName;
+                    avatarUrl = prof.avatar_url;
                 }
-            }
-        } catch { /* skip */ }
+            } catch { /* skip */ }
+        }
+        users.push({ user_id: userId, display_name: displayName, avatar_url: avatarUrl, phone: u.phone, lastSeen: u.lastSeen });
     }
-    res.json({ users: Array.from(allUsers.values()) });
+    
+    // Also add piechat_admin if not in known list
+    if (token && !known.find(u => u.matrixUserId === ADMIN_USER)) {
+        users.push({ user_id: `@${ADMIN_USER}:${serverName}`, display_name: ADMIN_USER, phone: '(admin)' });
+    }
+    
+    res.json({ users });
 });
 
 // GET /auth/admin/rooms — list all rooms the admin has joined

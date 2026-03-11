@@ -55,6 +55,7 @@ type AuthState = {
     passwordFailures: Map<string, { count: number; blockedUntil: number }>;
     otpVerifyFailures: Map<string, { count: number; blockedUntil: number }>;
     loginEvents: Map<string, LoginEvent[]>;
+    knownUsers: Map<string, { matrixUserId: string; phone: string; displayName?: string; lastSeen: number }>;
 };
 
 const globalWithAuthState = globalThis as typeof globalThis & {
@@ -69,6 +70,7 @@ const authState: AuthState =
         passwordFailures: new Map(),
         otpVerifyFailures: new Map(),
         loginEvents: new Map(),
+        knownUsers: new Map(),
     };
 
 // Safety — ensure all Maps exist after hot-reload
@@ -78,10 +80,11 @@ authState.otpRequestTimestamps = authState.otpRequestTimestamps || new Map();
 authState.passwordFailures = authState.passwordFailures || new Map();
 authState.otpVerifyFailures = authState.otpVerifyFailures || new Map();
 authState.loginEvents = authState.loginEvents || new Map();
+authState.knownUsers = authState.knownUsers || new Map();
 
 globalWithAuthState.__piechatAuthState = authState;
 
-const { pendingOtps, trustedDevices, otpRequestTimestamps, passwordFailures, otpVerifyFailures, loginEvents } = authState;
+const { pendingOtps, trustedDevices, otpRequestTimestamps, passwordFailures, otpVerifyFailures, loginEvents, knownUsers } = authState;
 
 // ─── Constants ──────────────────────────────────────────
 
@@ -373,8 +376,24 @@ export function getAdminStats() {
         pendingOtpCount: pendingOtps.size,
         trustedDevicePhones: trustedDevices.size,
         trackedPhones: loginEvents.size,
+        knownUserCount: knownUsers.size,
         totalEvents: Array.from(loginEvents.values()).reduce((acc, events) => acc + events.length, 0),
         uptime: process.uptime(),
         memoryUsage: process.memoryUsage(),
     };
+}
+
+// ─── Known Users Registry ───────────────────────────────
+
+export function trackKnownUser(matrixUserId: string, phone: string, displayName?: string) {
+    knownUsers.set(matrixUserId, {
+        matrixUserId,
+        phone,
+        displayName,
+        lastSeen: Date.now(),
+    });
+}
+
+export function listKnownUsers() {
+    return Array.from(knownUsers.values()).sort((a, b) => b.lastSeen - a.lastSeen);
 }

@@ -9,6 +9,8 @@ interface MatrixUser {
   name: string;
   displayname?: string;
   avatar_url?: string;
+  phone?: string;
+  lastSeen?: number;
 }
 
 interface MatrixRoom {
@@ -155,8 +157,8 @@ export default function AdminPage() {
     try {
       const res = await adminFetch('/admin/users');
       if (res.ok) {
-        const data = (await res.json()) as { users: Array<{ user_id: string; display_name?: string; avatar_url?: string }> };
-        setUsers((data.users || []).map(u => ({ name: u.user_id, displayname: u.display_name, avatar_url: u.avatar_url })));
+        const data = (await res.json()) as { users: Array<{ user_id: string; display_name?: string; avatar_url?: string; phone?: string; lastSeen?: number }> };
+        setUsers((data.users || []).map(u => ({ name: u.user_id, displayname: u.display_name, avatar_url: u.avatar_url, phone: u.phone, lastSeen: u.lastSeen })));
       } else {
         showNotice('error', `Lỗi tải người dùng: ${res.status}`);
       }
@@ -544,7 +546,7 @@ export default function AdminPage() {
                     </thead>
                     <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
                       {filteredUsers.map((user) => {
-                        const phone = extractPhone(user.name);
+                        const phone = user.phone || extractPhone(user.name);
                         return (
                           <tr key={user.name} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors">
                             <td className="px-4 py-3"><p className="font-mono text-xs text-zinc-700 dark:text-zinc-300">{user.name}</p></td>
