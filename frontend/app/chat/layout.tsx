@@ -251,38 +251,46 @@ export default function ChatLayout({
       });
   }, [searchableRooms, pinnedRoomIds]);
 
+  // Helper: check if user has replied in a DM (sent at least one message)
+  const hasUserReplied = (room: typeof rooms[0]) => {
+    // If user sent the last message, they've replied
+    if (room.lastMessage?.senderId === currentUser?.id) return true;
+    // For rooms with accepted friendship, consider as replied
+    if (room.friendship?.status === 'accepted') return true;
+    // For rooms without friendship data but have messages, consider as replied (legacy)
+    if (!room.friendship && !!room.lastMessage) return true;
+    return false;
+  };
+
+  // Conversation tab: ALL conversations I've interacted with
   const personalChats = useMemo(() => {
-    // Collect IDs of channels the user is actually a member of
     const joinedChannelIds = new Set(
       rooms.filter(r => r.type === 'channel').map(r => r.id)
     );
 
     return recentChats.filter(room => {
-      // Hide assistant rooms from personal tab
+      // Hide assistant rooms
       if (assistantRoomIds.includes(room.id) || room.isAssistant) return false;
-      // Groups without channelId (standalone groups)
+      // Groups & channels always show
       if (room.type === 'group' && !room.channelId) return true;
-      // Groups where user is NOT a member of parent channel (guest visitor / khách vãng lai)
       if (room.type === 'group' && room.channelId && !joinedChannelIds.has(room.channelId)) return true;
       if (room.type !== 'dm') return false;
 
-      // Show DMs that have an accepted friendship OR have messages (backward compat)
-      if (room.friendship?.status === 'accepted') return true;
-      // Also show DMs without explicit friendship (old rooms, or missing data) if they have messages
-      if (!room.friendship && !!room.lastMessage) return true;
-      return false;
+      // DMs: show if friend OR if I've replied/interacted
+      return hasUserReplied(room);
     });
-  }, [recentChats, rooms, assistantRoomIds]);
+  }, [recentChats, rooms, assistantRoomIds, currentUser]);
 
+  // Message requests: strangers I haven't replied to (will show in contacts tab)
   const messageRequests = useMemo(() => {
     return recentChats.filter(room => {
       if (room.type !== 'dm') return false;
-
-      // They are requests if not accepted and not me talking to me
       const otherMember = room.members.find(m => m.id !== currentUser?.id);
       if (!otherMember) return false;
-
-      return room.friendship?.status !== 'accepted';
+      // Only show as request if NOT accepted AND I haven't replied
+      if (room.friendship?.status === 'accepted') return false;
+      if (room.lastMessage?.senderId === currentUser?.id) return false; // I replied
+      return true;
     });
   }, [recentChats, currentUser]);
 
@@ -1380,72 +1388,6 @@ export default function ChatLayout({
                 </div>
               ))}
 
-              {messageRequests.length > 0 && (
-                <div className="mt-4 px-2">
-                  <button
-                    onClick={() => setIsMessageRequestsOpen(!isMessageRequestsOpen)}
-                    className="flex w-full items-center justify-between rounded-xl bg-amber-50/50 p-3 text-left transition-all hover:bg-amber-50 dark:bg-amber-900/10 dark:hover:bg-amber-900/20 border border-amber-100/50 dark:border-amber-900/30"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400">
-                        <MessageSquareWarning className="h-4 w-4" />
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold text-amber-900 dark:text-amber-100">{t(language, 'chatMessageRequests' as any)}</p>
-                        <p className="text-[10px] text-amber-600/70 dark:text-amber-400/70">{messageRequests.length} {t(language, 'chatOther' as any)}</p>
-                      </div>
-                    </div>
-                    {isMessageRequestsOpen ? <ChevronDown className="h-4 w-4 text-amber-600" /> : <ChevronRight className="h-4 w-4 text-amber-600" />}
-                  </button>
-
-                  {isMessageRequestsOpen && (
-                    <div className="mt-2 space-y-1 pl-1 border-l border-amber-100 dark:border-amber-900/30 animate-in slide-in-from-top-1 duration-200">
-                      {messageRequests.map(room => {
-                        const otherMember = room.members.find(m => m.id !== currentUser?.id);
-                        const displayName = otherMember?.displayName || otherMember?.username || room.name;
-                        return (
-                          <div
-                            key={room.id}
-                            className={cn(
-                              "flex items-center gap-3 p-2 rounded-xl transition-all",
-                              room.id === activeRoomId ? "bg-amber-100/30" : "hover:bg-gray-50 dark:hover:bg-zinc-900/20"
-                            )}
-                          >
-                            <Link
-                              href={`/chat/${encodeURIComponent(room.id)}`}
-                              className="flex items-center gap-3 flex-1 min-w-0"
-                            >
-                              <div className="h-9 w-9 shrink-0 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 font-bold text-sm dark:bg-amber-900/30 dark:text-amber-400">
-                                {displayName.charAt(0).toUpperCase()}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="truncate text-xs font-semibold text-zinc-900 dark:text-zinc-100">{displayName}</p>
-                                <p className="truncate text-[10px] text-zinc-500">{room.lastMessage?.content || t(language, 'chatNoMessages')}</p>
-                              </div>
-                            </Link>
-                            <div className="flex items-center gap-1 shrink-0">
-                              <button
-                                onClick={async (e) => { e.stopPropagation(); await acceptFriendRequest(room.id); }}
-                                className="h-7 w-7 rounded-full bg-emerald-100 text-emerald-600 hover:bg-emerald-200 flex items-center justify-center transition-colors dark:bg-emerald-900/30 dark:text-emerald-400 dark:hover:bg-emerald-900/50"
-                                title={t(language, 'chatAcceptFriend')}
-                              >
-                                <UserPlus className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                onClick={async (e) => { e.stopPropagation(); await declineFriendRequest(room.id); }}
-                                className="h-7 w-7 rounded-full bg-rose-100 text-rose-600 hover:bg-rose-200 flex items-center justify-center transition-colors dark:bg-rose-900/30 dark:text-rose-400 dark:hover:bg-rose-900/50"
-                                title={t(language, 'chatRejectFriend')}
-                              >
-                                <X className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
           )
           }
@@ -1546,7 +1488,68 @@ export default function ChatLayout({
           {
             activeSection === 'contacts' && (
               <div className="space-y-4 pt-2">
-                {/* Incoming Requests Section */}
+                {/* Message Requests (tin nhắn chờ) */}
+                {messageRequests.length > 0 && (
+                  <div className="px-2 space-y-2">
+                    <button
+                      onClick={() => setIsMessageRequestsOpen(!isMessageRequestsOpen)}
+                      className="flex w-full items-center justify-between rounded-xl bg-amber-50/50 p-3 text-left transition-all hover:bg-amber-50 dark:bg-amber-900/10 dark:hover:bg-amber-900/20 border border-amber-100/50 dark:border-amber-900/30"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400">
+                          <MessageSquareWarning className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-amber-900 dark:text-amber-100">{t(language, 'chatMessageRequests' as any)}</p>
+                          <p className="text-[10px] text-amber-600/70 dark:text-amber-400/70">{messageRequests.length} tin nhắn chờ</p>
+                        </div>
+                      </div>
+                      {isMessageRequestsOpen ? <ChevronDown className="h-4 w-4 text-amber-600" /> : <ChevronRight className="h-4 w-4 text-amber-600" />}
+                    </button>
+                    {isMessageRequestsOpen && (
+                      <div className="space-y-1 pl-1 border-l border-amber-100 dark:border-amber-900/30 animate-in slide-in-from-top-1 duration-200">
+                        {messageRequests.map(room => {
+                          const otherMember = room.members.find(m => m.id !== currentUser?.id);
+                          const dName = otherMember?.displayName || otherMember?.username || room.name;
+                          return (
+                            <div key={room.id} className={cn(
+                              "flex items-center gap-3 p-2 rounded-xl transition-all",
+                              room.id === activeRoomId ? "bg-amber-100/30" : "hover:bg-gray-50 dark:hover:bg-zinc-900/20"
+                            )}>
+                              <Link href={`/chat/${encodeURIComponent(room.id)}`} className="flex items-center gap-3 flex-1 min-w-0">
+                                <div className="h-9 w-9 shrink-0 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 font-bold text-sm dark:bg-amber-900/30 dark:text-amber-400">
+                                  {dName.charAt(0).toUpperCase()}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="truncate text-xs font-semibold text-zinc-900 dark:text-zinc-100">{dName}</p>
+                                  <p className="truncate text-[10px] text-zinc-500">{room.lastMessage?.content || t(language, 'chatNoMessages')}</p>
+                                </div>
+                              </Link>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                  onClick={async (e) => { e.stopPropagation(); await acceptFriendRequest(room.id); }}
+                                  className="h-7 w-7 rounded-full bg-emerald-100 text-emerald-600 hover:bg-emerald-200 flex items-center justify-center transition-colors dark:bg-emerald-900/30 dark:text-emerald-400"
+                                  title={t(language, 'chatAcceptFriend')}
+                                >
+                                  <UserPlus className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  onClick={async (e) => { e.stopPropagation(); await declineFriendRequest(room.id); }}
+                                  className="h-7 w-7 rounded-full bg-rose-100 text-rose-600 hover:bg-rose-200 flex items-center justify-center transition-colors dark:bg-rose-900/30 dark:text-rose-400"
+                                  title={t(language, 'chatRejectFriend')}
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Incoming Friend Requests */}
                 {incomingFriendRequests.length > 0 && (
                   <div className="px-2 space-y-2">
                     <h3 className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 px-2">{t(language, 'chatIncomingRequests')}</h3>

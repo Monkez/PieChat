@@ -258,7 +258,12 @@ export const useMatrixStore = create<MatrixState>((set, get) => ({
         }
 
         if (isNewMessage && nextRoom.id !== currentRoomId) {
-          const senderName = nextRoom.members.find(m => m.id === nextRoom.lastMessage?.senderId)?.username || 'Ai đó';
+          // Skip notification for own messages
+          const myUserId = get().currentUser?.id;
+          if (nextRoom.lastMessage?.senderId === myUserId) return;
+
+          const senderName = nextRoom.members.find(m => m.id === nextRoom.lastMessage?.senderId)?.displayName
+            || nextRoom.members.find(m => m.id === nextRoom.lastMessage?.senderId)?.username || 'Ai đó';
           const roomName = nextRoom.name || 'Phòng chat';
 
           void matrixService.showNotification(`${senderName} (${roomName})`, {
