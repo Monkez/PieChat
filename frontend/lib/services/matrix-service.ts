@@ -1284,6 +1284,7 @@ class MatrixService {
           type: string;
           content: Record<string, unknown>;
           origin_server_ts: number;
+          unsigned?: { redacted_because?: unknown };
         }>;
         end?: string;
       }>(`/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/messages?dir=b&limit=500`);
@@ -1303,6 +1304,7 @@ class MatrixService {
             type: string;
             content: Record<string, unknown>;
             origin_server_ts: number;
+            unsigned?: { redacted_because?: unknown };
           }>;
           end?: string;
         }>(`/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/messages?dir=b&limit=200&from=${encodeURIComponent(end)}`);
@@ -1359,6 +1361,9 @@ class MatrixService {
 
       const messages = chunk
         .filter((event) => {
+          // Skip redacted (deleted) events — they have empty content or redacted_because
+          if (event.unsigned?.redacted_because) return false;
+          if (event.type === 'm.room.message' && (!event.content || Object.keys(event.content).length === 0)) return false;
           if (event.type === 'm.room.message') return true;
           // Only show the invite event for a call, we will enrich its content
           if (event.type === 'm.call.invite') return true;
