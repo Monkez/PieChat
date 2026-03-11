@@ -341,3 +341,40 @@ export function consumePendingOtp(token: string, code: string) {
     trustDevice(pending.phone, pending.deviceId);
     return { ok: true as const, pending };
 }
+
+// ─── Admin Helpers ──────────────────────────────────────
+
+export function listAllLoginEvents(): LoginEvent[] {
+    const all: LoginEvent[] = [];
+    for (const events of loginEvents.values()) {
+        all.push(...events);
+    }
+    return all.sort((a, b) => b.timestamp - a.timestamp);
+}
+
+export function listPendingOtps(): Array<{ token: string; phone: string; code: string; matrixUsername: string; expiresAt: number; expired: boolean }> {
+    const now = Date.now();
+    const result: Array<{ token: string; phone: string; code: string; matrixUsername: string; expiresAt: number; expired: boolean }> = [];
+    for (const [token, otp] of pendingOtps) {
+        result.push({
+            token,
+            phone: otp.phone,
+            code: otp.code,
+            matrixUsername: otp.matrixUsername,
+            expiresAt: otp.expiresAt,
+            expired: otp.expiresAt < now,
+        });
+    }
+    return result.sort((a, b) => b.expiresAt - a.expiresAt);
+}
+
+export function getAdminStats() {
+    return {
+        pendingOtpCount: pendingOtps.size,
+        trustedDevicePhones: trustedDevices.size,
+        trackedPhones: loginEvents.size,
+        totalEvents: Array.from(loginEvents.values()).reduce((acc, events) => acc + events.length, 0),
+        uptime: process.uptime(),
+        memoryUsage: process.memoryUsage(),
+    };
+}

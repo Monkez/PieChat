@@ -57,6 +57,10 @@ app.get('/', (_req, res) => {
             'DELETE /auth/devices',
             'GET  /auth/login-events',
             'GET  /auth/health',
+            'GET  /auth/admin/recent-logs',
+            'GET  /auth/admin/pending-otps',
+            'GET  /auth/admin/stats',
+            'GET  /auth/admin/docker-logs',
         ],
     });
 });

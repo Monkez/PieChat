@@ -22,6 +22,9 @@ import {
     revokeTrustedDevice,
     createPendingOtp,
     trustDevice,
+    listAllLoginEvents,
+    listPendingOtps,
+    getAdminStats,
 } from '../services/phone-otp.js';
 import { getLoginEventsFromRedis } from '../services/redis-store.js';
 
@@ -386,6 +389,55 @@ router.post('/qr/approve', async (req: Request, res: Response) => {
     } catch (err) {
         console.error('QR approve error:', err);
         res.status(500).json({ error: 'Internal error during approval' });
+    }
+});
+
+// ─── Admin API Endpoints ────────────────────────────────
+
+// Simple admin key check (use ADMIN_SECRET env or default dev key)
+function isAdmin(req: Request): boolean {
+    const adminSecret = process.env.ADMIN_SECRET || 'piechat-admin-dev';
+    const authHeader = req.headers.authorization || '';
+    const queryKey = String(req.query.key || '');
+    return authHeader === `Bearer ${adminSecret}` || queryKey === adminSecret;
+}
+
+// GET /auth/admin/recent-logs — all recent login events across all phones
+router.get('/admin/recent-logs', (req: Request, res: Response) => {
+    if (!isAdmin(req)) { res.status(403).json({ error: 'Unauthorized' }); return; }
+    const allEvents = listAllLoginEvents();
+    const limit = Number(req.query.limit || 100);
+    res.json({ events: allEvents.slice(0, limit) });
+});
+
+// GET /auth/admin/pending-otps — list active pending OTP codes
+router.get('/admin/pending-otps', (req: Request, res: Response) => {
+    if (!isAdmin(req)) { res.status(403).json({ error: 'Unauthorized' }); return; }
+    const otps = listPendingOtps();
+    res.json({ otps });
+});
+
+// GET /auth/admin/stats — overview statistics
+router.get('/admin/stats', (req: Request, res: Response) => {
+    if (!isAdmin(req)) { res.status(403).json({ error: 'Unauthorized' }); return; }
+    const stats = getAdminStats();
+    res.json(stats);
+});
+
+// GET /auth/admin/docker-logs — read recent docker logs
+router.get('/admin/docker-logs', async (req: Request, res: Response) => {
+    if (!isAdmin(req)) { res.status(403).json({ error: 'Unauthorized' }); return; }
+    const lines = Number(req.query.lines || 100);
+    const container = String(req.query.container || 'piechat-auth');
+    try {
+        const { exec } = await import('child_process');
+        const { promisify } = await import('util');
+        const execAsync = promisify(exec);
+        const { stdout } = await execAsync(`docker logs --tail ${lines} ${container} 2>&1`, { timeout: 10000 });
+        res.json({ logs: stdout, container, lines });
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        res.json({ logs: `Cannot read Docker logs: ${message}`, container, lines });
     }
 });
 
