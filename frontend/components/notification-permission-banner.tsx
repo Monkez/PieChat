@@ -6,7 +6,6 @@ import { cn } from '@/lib/utils';
 
 export function NotificationPermissionBanner() {
   const [show, setShow] = useState(false);
-  const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !('Notification' in window)) return;
@@ -21,24 +20,25 @@ export function NotificationPermissionBanner() {
     return () => clearTimeout(timer);
   }, []);
 
-  if (!show || dismissed) return null;
+  if (!show) return null;
 
   const handleAllow = async () => {
     try {
       const permission = await Notification.requestPermission();
-      if (permission === 'granted') {
-        setShow(false);
-      } else {
-        setDismissed(true);
+      // Always hide banner after user interacts with the browser permission dialog
+      setShow(false);
+      if (permission !== 'granted') {
         sessionStorage.setItem('piechat_notif_dismissed', '1');
       }
     } catch {
-      setDismissed(true);
+      // If requestPermission fails, just hide the banner
+      setShow(false);
+      sessionStorage.setItem('piechat_notif_dismissed', '1');
     }
   };
 
   const handleDismiss = () => {
-    setDismissed(true);
+    setShow(false);
     sessionStorage.setItem('piechat_notif_dismissed', '1');
   };
 
