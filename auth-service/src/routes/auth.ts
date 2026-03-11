@@ -29,7 +29,7 @@ import {
     listKnownUsers,
 } from '../services/phone-otp.js';
 import { getLoginEventsFromRedis } from '../services/redis-store.js';
-import { listAllUsers as dbListAllUsers, listAllRooms as dbListAllRooms, getPresenceData, getDevices, getRoomMemberships, getMediaStats } from '../services/dendrite-db.js';
+import { listAllUsers as dbListAllUsers, listAllRooms as dbListAllRooms, getPresenceData, getDevices, getRoomMemberships, getMediaStats, deleteUserFromDB } from '../services/dendrite-db.js';
 
 const router = Router();
 
@@ -663,45 +663,40 @@ router.get('/admin/dashboard', async (req: Request, res: Response) => {
     });
 });
 
-// POST /auth/admin/delete-user — evacuate user from all rooms + deactivate
+// POST /auth/admin/delete-user — evacuate user from all rooms + delete from DB
 router.post('/admin/delete-user', async (req: Request, res: Response) => {
     if (!isAdmin(req)) { res.status(403).json({ error: 'Unauthorized' }); return; }
     const { userId } = req.body as { userId?: string };
     if (!userId) { res.status(400).json({ error: 'userId required' }); return; }
     
-    const token = await getAdminToken();
-    if (!token) { res.status(500).json({ error: 'Cannot get admin token' }); return; }
-    
     const results: string[] = [];
     
-    // Step 1: Evacuate user from all rooms
-    try {
-        const evacRes = await fetch(`${matrixBaseUrl}/_dendrite/admin/evacuateUser/${userId}`, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${token}` },
-        });
-        const evacData = (await evacRes.json()) as { affected?: string[]; error?: string };
-        if (evacRes.ok) {
-            results.push(`Evacuated from ${evacData.affected?.length || 0} rooms`);
-        } else {
-            results.push(`Evacuate warning: ${evacData.error || evacRes.status}`);
-        }
-    } catch (err) { results.push(`Evacuate error: ${err}`); }
+    // Step 1: Evacuate user from all rooms via Dendrite admin API
+    const token = await getAdminToken();
+    if (token) {
+        try {
+            const evacRes = await fetch(`${matrixBaseUrl}/_dendrite/admin/evacuateUser/${userId}`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            const evacData = (await evacRes.json()) as { affected?: string[]; error?: string };
+            if (evacRes.ok) {
+                results.push(`Evacuated from ${evacData.affected?.length || 0} rooms`);
+            } else {
+                results.push(`Evacuate: ${evacData.error || evacRes.status}`);
+            }
+        } catch (err) { results.push(`Evacuate error: ${err}`); }
+    }
     
-    // Step 2: Deactivate account
-    try {
-        const deactRes = await fetch(`${matrixBaseUrl}/_matrix/client/v3/admin/deactivate/${userId}`, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ erase: true }),
-        });
-        if (deactRes.ok) {
-            results.push('Account deactivated');
-        } else {
-            const deactData = (await deactRes.json()) as { error?: string };
-            results.push(`Deactivate warning: ${deactData.error || deactRes.status}`);
-        }
-    } catch (err) { results.push(`Deactivate error: ${err}`); }
+    // Step 2: Delete user from Dendrite database directly
+    const match = userId.match(/^@(.+):(.+)$/);
+    if (match) {
+        const [, localpart, serverName] = match;
+        const dbResult = deleteUserFromDB(localpart, serverName);
+        results.push(...dbResult.details);
+    } else {
+        results.push('Invalid userId format');
+    }
     
     console.log(`[Admin] Delete user ${userId}: ${results.join('; ')}`);
     res.json({ success: true, userId, details: results });

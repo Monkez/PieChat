@@ -8,14 +8,14 @@ import { existsSync } from 'fs';
 
 const DENDRITE_DATA = process.env.DENDRITE_DATA_PATH || '/dendrite-data';
 
-function openDB(name: string): Database.Database | null {
+function openDB(name: string, writable = false): Database.Database | null {
     const path = `${DENDRITE_DATA}/${name}`;
     if (!existsSync(path)) {
         console.warn(`[DendriteDB] Database not found: ${path}`);
         return null;
     }
     try {
-        return new Database(path, { readonly: true, fileMustExist: true });
+        return new Database(path, { readonly: !writable, fileMustExist: true });
     } catch (err) {
         console.error(`[DendriteDB] Cannot open ${path}:`, err);
         return null;
@@ -245,5 +245,46 @@ export function getMediaStats(): { totalFiles: number; totalSize: number } {
         console.error('[DendriteDB] Error getting media stats:', err);
         db.close();
         return { totalFiles: 0, totalSize: 0 };
+    }
+}
+
+// ─── Delete User from Database ──────────────────────────
+
+export function deleteUserFromDB(localpart: string, serverName: string): { success: boolean; details: string[] } {
+    const details: string[] = [];
+    const db = openDB('dendrite-userapi-accounts.db', true);
+    if (!db) return { success: false, details: ['Cannot open accounts database'] };
+    
+    try {
+        const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[];
+        
+        // Delete from account table
+        const accountTable = tables.find(t => t.name.includes('account') && !t.name.includes('device'));
+        if (accountTable) {
+            const result = db.prepare(`DELETE FROM "${accountTable.name}" WHERE localpart = ? AND server_name = ?`).run(localpart, serverName);
+            details.push(`Account: ${result.changes} row(s) deleted`);
+        }
+        
+        // Delete from device table
+        const deviceTable = tables.find(t => t.name.includes('device'));
+        if (deviceTable) {
+            const result = db.prepare(`DELETE FROM "${deviceTable.name}" WHERE localpart = ? AND server_name = ?`).run(localpart, serverName);
+            details.push(`Devices: ${result.changes} row(s) deleted`);
+        }
+        
+        // Delete from profile table
+        const profileTable = tables.find(t => t.name.includes('profile'));
+        if (profileTable) {
+            const result = db.prepare(`DELETE FROM "${profileTable.name}" WHERE localpart = ? AND server_name = ?`).run(localpart, serverName);
+            details.push(`Profile: ${result.changes} row(s) deleted`);
+        }
+        
+        db.close();
+        console.log(`[DendriteDB] Deleted user ${localpart}:${serverName}: ${details.join(', ')}`);
+        return { success: true, details };
+    } catch (err) {
+        console.error('[DendriteDB] Error deleting user:', err);
+        db.close();
+        return { success: false, details: [`Error: ${err}`] };
     }
 }
