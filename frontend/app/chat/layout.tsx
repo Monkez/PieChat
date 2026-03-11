@@ -1191,6 +1191,22 @@ export default function ChatLayout({
 
           {activeSection === 'personal' && (
             <div className="space-y-0.5 pt-2">
+              {recentChats.some((r: any) => r.unreadCount > 0) && (
+                <button
+                  onClick={async () => {
+                    for (const r of recentChats) {
+                      if ((r as any).unreadCount > 0 && (r as any).lastMessage?.id) {
+                        try { await matrixService.sendReadReceipt(r.id, (r as any).lastMessage.id); } catch { /* skip */ }
+                      }
+                    }
+                    await fetchRooms();
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 mb-1 text-[11px] font-medium text-sky-600 hover:bg-sky-50 dark:text-sky-400 dark:hover:bg-sky-900/20 rounded-lg transition-colors"
+                >
+                  <CheckCircle className="h-3.5 w-3.5" />
+                  Đánh dấu tất cả đã đọc
+                </button>
+              )}
               {recentChats.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-10 text-zinc-400">
                   <MessageSquare className="h-10 w-10 mb-2 opacity-20" />

@@ -9,6 +9,7 @@ import { t } from '@/lib/i18n';
 import { authUrl } from '@/lib/config';
 import LanguageSwitcher from '@/components/language-switcher';
 import { MobileBottomBar } from '@/components/mobile-bottom-bar';
+import { getNotifSound, setNotifSound, playNotifSoundPreview, type NotifSoundType } from '@/lib/services/chat-notification-service';
 import { useThemeStore, PRESET_COLORS } from '@/lib/store/theme-store';
 
 type LoginEventItem = {
@@ -132,6 +133,37 @@ export default function SettingsPage() {
                   >
                     <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out dark:bg-black ${theme === 'dark' ? 'translate-x-5' : 'translate-x-0'}`} />
                   </button>
+                </div>
+                {/* Notification Sound */}
+                <div className="py-4 px-4 sm:px-6 sm:py-5 border-t border-zinc-200 dark:border-zinc-800">
+                  <div className="flex items-center gap-3 mb-3">
+                    <Bell className="h-5 w-5 text-zinc-400" />
+                    <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Âm thanh thông báo</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {([
+                      { value: 'chime' as NotifSoundType, label: '🔔 Chime' },
+                      { value: 'bell' as NotifSoundType, label: '🔊 Bell' },
+                      { value: 'ping' as NotifSoundType, label: '📌 Ping' },
+                      { value: 'marimba' as NotifSoundType, label: '🎵 Marimba' },
+                      { value: 'silent' as NotifSoundType, label: '🔇 Im lặng' },
+                    ]).map((s) => (
+                      <button
+                        key={s.value}
+                        onClick={() => {
+                          setNotifSound(s.value);
+                          playNotifSoundPreview(s.value);
+                        }}
+                        className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+                          getNotifSound() === s.value
+                            ? 'border-sky-500 bg-sky-50 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300 dark:border-sky-600'
+                            : 'border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800'
+                        }`}
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 {/* Accent Color */}
                 <div className="py-4 px-4 sm:px-6 sm:py-5 border-t border-zinc-200 dark:border-zinc-800">

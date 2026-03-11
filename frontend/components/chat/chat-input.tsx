@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Paperclip, Smile, Mic, Square, FolderOpen, File, X, Loader2, Contact, BarChart3, AlarmClock, Reply, Pencil } from 'lucide-react';
+import { Send, Paperclip, Smile, Mic, Square, FolderOpen, File, X, Loader2, Contact, BarChart3, AlarmClock, Reply, Pencil, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { StickerPicker } from './sticker-picker';
 
@@ -28,15 +28,17 @@ interface ChatInputProps {
   onReplyMessage?: (messageId: string, content: string) => void;
   placeholder?: string;
   disabled?: boolean;
+  onScheduleMessage?: (content: string, sendAt: number) => void;
 }
 
-export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoice, onSendContact, onSendSticker, onOpenPollDialog, onOpenReminderDialog, onTyping, replyEdit, onCancelReplyEdit, onEditMessage, onReplyMessage, placeholder, disabled }: ChatInputProps) {
+export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoice, onSendContact, onSendSticker, onOpenPollDialog, onOpenReminderDialog, onTyping, replyEdit, onCancelReplyEdit, onEditMessage, onReplyMessage, placeholder, disabled, onScheduleMessage }: ChatInputProps) {
   const [message, setMessage] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const [isAttachMenuOpen, setIsAttachMenuOpen] = useState(false);
   const [isStickerOpen, setIsStickerOpen] = useState(false);
+  const [isScheduleOpen, setIsScheduleOpen] = useState(false);
   const attachMenuRef = useRef<HTMLDivElement>(null);
 
   // Voice recording state
@@ -427,6 +429,65 @@ export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoic
                 <AlarmClock className="h-4 w-4" />
                 Nhắc hẹn
               </button>
+              <button
+                onClick={() => { setIsAttachMenuOpen(false); setIsScheduleOpen(true); }}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-zinc-700 hover:bg-sky-50 hover:text-sky-700 dark:text-zinc-200 dark:hover:bg-sky-900/20 dark:hover:text-sky-400 transition-colors"
+              >
+                <Clock className="h-4 w-4" />
+                Hẹn giờ gửi
+              </button>
+            </div>
+          )}
+
+          {/* Schedule Picker */}
+          {isScheduleOpen && (
+            <div className="absolute bottom-full left-0 mb-2 w-64 rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-xl p-4 z-50">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">⏰ Hẹn giờ gửi</h4>
+                <button onClick={() => setIsScheduleOpen(false)} className="text-zinc-400 hover:text-zinc-600">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              {!message.trim() && (
+                <p className="text-xs text-amber-600 mb-2">Nhập tin nhắn trước khi hẹn giờ</p>
+              )}
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                {[
+                  { label: '5 phút', ms: 5 * 60 * 1000 },
+                  { label: '30 phút', ms: 30 * 60 * 1000 },
+                  { label: '1 giờ', ms: 60 * 60 * 1000 },
+                  { label: '3 giờ', ms: 3 * 60 * 60 * 1000 },
+                ].map(opt => (
+                  <button
+                    key={opt.label}
+                    disabled={!message.trim()}
+                    onClick={() => {
+                      const sendAt = Date.now() + opt.ms;
+                      onScheduleMessage?.(message.trim(), sendAt);
+                      setMessage('');
+                      setIsScheduleOpen(false);
+                      if (textareaRef.current) textareaRef.current.style.height = 'auto';
+                    }}
+                    className="rounded-lg border border-zinc-200 dark:border-zinc-700 px-3 py-2 text-xs font-medium hover:bg-sky-50 dark:hover:bg-sky-900/20 disabled:opacity-40 transition-colors"
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <input
+                type="datetime-local"
+                min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
+                onChange={(e) => {
+                  if (!message.trim() || !e.target.value) return;
+                  const sendAt = new Date(e.target.value).getTime();
+                  if (sendAt <= Date.now()) return;
+                  onScheduleMessage?.(message.trim(), sendAt);
+                  setMessage('');
+                  setIsScheduleOpen(false);
+                  if (textareaRef.current) textareaRef.current.style.height = 'auto';
+                }}
+                className="w-full rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 px-3 py-2 text-xs text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-2 focus:ring-sky-500"
+              />
             </div>
           )}
         </div>

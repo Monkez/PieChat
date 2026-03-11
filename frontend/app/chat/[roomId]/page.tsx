@@ -1180,6 +1180,25 @@ export default function RoomPage() {
                       {t(language, 'chatJoin')}
                     </button>
                   )}
+                  {/* Copy Invite Link */}
+                  {room?.type !== 'dm' && (
+                    <button
+                      onClick={() => {
+                        setIsMenuOpen(false);
+                        const base = typeof window !== 'undefined' ? window.location.origin : '';
+                        const link = `${base}/chat/${encodeURIComponent(roomId)}`;
+                        navigator.clipboard.writeText(link).then(() => {
+                          alert('Đã sao chép link mời vào clipboard!');
+                        }).catch(() => {
+                          prompt('Sao chép link này:', link);
+                        });
+                      }}
+                      className="flex w-full items-center gap-2 px-4 py-2 text-sm text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                    >
+                      <Copy className="h-4 w-4" />
+                      Sao chép link mời
+                    </button>
+                  )}
                   {/* Export Chat History */}
                   <button
                     onClick={() => {
@@ -1747,6 +1766,20 @@ export default function RoomPage() {
                 onReplyMessage={handleReplyMessage}
                 disabled={isReadOnlyForMe}
                 placeholder={isReadOnlyForMe ? t(language, 'chatRestrictSpeaking') : undefined}
+                onScheduleMessage={(content, sendAt) => {
+                  const delay = sendAt - Date.now();
+                  if (delay <= 0) {
+                    void handleSendMessage(content);
+                    return;
+                  }
+                  const dt = new Date(sendAt);
+                  const timeStr = dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+                  const dateStr = dt.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
+                  alert(`📨 Tin nhắn sẽ được gửi lúc ${timeStr} ngày ${dateStr}`);
+                  setTimeout(() => {
+                    void handleSendMessage(content);
+                  }, delay);
+                }}
               />
             </div>
           </>

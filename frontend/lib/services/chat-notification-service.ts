@@ -73,15 +73,31 @@ async function showNotification(title: string, body: string, options?: {
 }
 
 // Play a synthesized notification chime (no file needed)
-function playNotificationSound() {
+export type NotifSoundType = 'chime' | 'bell' | 'ping' | 'marimba' | 'silent';
+
+export function getNotifSound(): NotifSoundType {
+  if (typeof window === 'undefined') return 'chime';
+  return (localStorage.getItem('piechat_notif_sound') as NotifSoundType) || 'chime';
+}
+
+export function setNotifSound(sound: NotifSoundType) {
+  localStorage.setItem('piechat_notif_sound', sound);
+}
+
+export function playNotifSoundPreview(sound: NotifSoundType) {
+  playNotificationSoundImpl(sound);
+}
+
+function playNotificationSoundImpl(sound: NotifSoundType) {
+  if (sound === 'silent') return;
   try {
     const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const playTone = (freq: number, startTime: number, duration: number) => {
+    const playTone = (freq: number, startTime: number, duration: number, type: OscillatorType = 'sine', vol = 0.15) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-      osc.type = 'sine';
+      osc.type = type;
       osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0.15, startTime);
+      gain.gain.setValueAtTime(vol, startTime);
       gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
       osc.connect(gain);
       gain.connect(ctx.destination);
@@ -89,12 +105,33 @@ function playNotificationSound() {
       osc.stop(startTime + duration);
     };
     const now = ctx.currentTime;
-    playTone(880, now, 0.15);        // A5
-    playTone(1174.66, now + 0.12, 0.2); // D6
-    setTimeout(() => ctx.close(), 500);
+    switch (sound) {
+      case 'chime':
+        playTone(880, now, 0.15);
+        playTone(1174.66, now + 0.12, 0.2);
+        break;
+      case 'bell':
+        playTone(523.25, now, 0.3, 'sine', 0.2);
+        playTone(659.25, now + 0.15, 0.3, 'sine', 0.15);
+        playTone(783.99, now + 0.3, 0.4, 'sine', 0.1);
+        break;
+      case 'ping':
+        playTone(1318.51, now, 0.08, 'sine', 0.2);
+        break;
+      case 'marimba':
+        playTone(523.25, now, 0.1, 'triangle', 0.2);
+        playTone(659.25, now + 0.08, 0.1, 'triangle', 0.18);
+        playTone(783.99, now + 0.16, 0.15, 'triangle', 0.15);
+        break;
+    }
+    setTimeout(() => ctx.close(), 800);
   } catch {
     // Audio not available
   }
+}
+
+function playNotificationSound() {
+  playNotificationSoundImpl(getNotifSound());
 }
 
 // In-app toast notification
