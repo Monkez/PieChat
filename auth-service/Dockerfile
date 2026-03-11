@@ -19,5 +19,5 @@ RUN npm install --omit=dev && apk del python3 make g++
 COPY --from=builder /app/dist/ ./dist/
 
 EXPOSE 4000
-USER node
+# Note: Runs as root to allow write access to Dendrite SQLite DBs (for admin operations)
 CMD ["node", "dist/index.js"]
