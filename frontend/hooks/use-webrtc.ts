@@ -151,15 +151,16 @@ export function useWebRTC() {
         const currentRoomId = useCallStore.getState().roomId;
         const currentCallId = useCallStore.getState().callId;
         const currentStatus = useCallStore.getState().status;
-        if (currentRoomId && currentCallId) {
-            const eventType = currentStatus === 'incoming' ? 'm.call.hangup' : 'm.call.hangup';
-            void matrixService.sendCallEvent(currentRoomId, currentCallId, eventType, {
-                reason: currentStatus === 'incoming' ? 'user_busy' : 'user_hangup',
-            });
-        }
+        // Always cleanup and end call first, then try to send hangup event
         cleanup();
-        endCall();
-    }, [endCall, cleanup]);
+        useCallStore.getState().endCall();
+        // Send hangup event in background (don't block UI)
+        if (currentRoomId && currentCallId) {
+            matrixService.sendCallEvent(currentRoomId, currentCallId, 'm.call.hangup', {
+                reason: currentStatus === 'incoming' ? 'user_busy' : 'user_hangup',
+            }).catch(() => {});
+        }
+    }, [cleanup]);
 
     // ─── Toggle mute ────────────────────────────────────
     const toggleMute = useCallback(() => {
