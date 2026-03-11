@@ -1046,10 +1046,30 @@ export function MessageBubble({
             <span className="italic opacity-70">đã sửa</span>
           )}
           {isMe && (
-            <span className="ml-1 opacity-80">
-              {msg.status === 'sent' && '✓'}
-              {msg.status === 'sending' && '...'}
-              {msg.status === 'failed' && '!'}
+            <span className="ml-0.5 inline-flex items-center">
+              {msg.status === 'sending' && (
+                <span className="opacity-60 text-[9px]">⏳</span>
+              )}
+              {msg.status === 'sent' && (
+                <svg className="h-3.5 w-3.5 text-zinc-400" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="4 8 7 11 12 5" />
+                </svg>
+              )}
+              {msg.status === 'delivered' && (
+                <svg className="h-3.5 w-3.5 text-zinc-400" viewBox="0 0 20 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="2 8 5 11 10 5" />
+                  <polyline points="7 8 10 11 15 5" />
+                </svg>
+              )}
+              {msg.status === 'read' && (
+                <svg className="h-3.5 w-3.5 text-sky-500" viewBox="0 0 20 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="2 8 5 11 10 5" />
+                  <polyline points="7 8 10 11 15 5" />
+                </svg>
+              )}
+              {msg.status === 'failed' && (
+                <span className="text-rose-500 text-[10px] font-bold">!</span>
+              )}
             </span>
           )}
         </div>
