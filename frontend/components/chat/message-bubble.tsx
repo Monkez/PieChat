@@ -34,6 +34,7 @@ interface MessageBubbleProps {
   currentUserId?: string;
   pollVotes?: Record<string, PollVote[]>;
   onButtonClick?: (msgId: string, buttonId: string, label: string) => void;
+  onAvatarClick?: (userId: string) => void;
 }
 
 const REACTION_ICONS: Record<string, string> = {
@@ -415,6 +416,7 @@ export function MessageBubble({
   currentUserId,
   pollVotes,
   onButtonClick,
+  onAvatarClick,
 }: MessageBubbleProps) {
   const { language } = useUiStore();
   const [showAbove, setShowAbove] = useState(false);
@@ -820,7 +822,7 @@ export function MessageBubble({
       onTouchMove={handleTouchMove}
     >
       {!isMe && (
-        <div className={cn("flex flex-col justify-end pb-1", isFirst ? "opacity-100" : "opacity-0")}>
+        <div className={cn("flex flex-col justify-end pb-1 cursor-pointer", isFirst ? "opacity-100" : "opacity-0")} onClick={() => onAvatarClick?.(msg.senderId)}>
           <Avatar name={senderName} size="sm" className="h-7 w-7 lg:h-8 lg:w-8" />
         </div>
       )}

@@ -33,6 +33,7 @@ export default function RoomPage() {
   const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
   const [activeMenuMessageId, setActiveMenuMessageId] = useState<string | null>(null);
   const [pinnedMessage, setPinnedMessage] = useState<Message | null>(null);
+  const [profileUserId, setProfileUserId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const userScrolledUpRef = useRef(false);
@@ -1686,6 +1687,7 @@ export default function RoomPage() {
                       onButtonClick={(msgId, btnId, label) => {
                         matrixService.sendButtonClick(roomId, msgId, btnId, label).catch(console.error);
                       }}
+                      onAvatarClick={(userId) => setProfileUserId(userId)}
                     />
                   </div>
                 );
@@ -2062,6 +2064,65 @@ export default function RoomPage() {
           </div>
         </div>
       )}
+
+      {/* User Profile Popup */}
+      {profileUserId && (() => {
+        const profileMember = room?.members.find(m => m.id === profileUserId);
+        const isCurrentUser = profileUserId === currentUser?.id;
+        return (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setProfileUserId(null)}>
+            <div className="w-[340px] rounded-2xl bg-white dark:bg-zinc-900 shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+              {/* Header gradient */}
+              <div className="h-24 bg-gradient-to-br from-sky-500 via-violet-500 to-fuchsia-500 relative">
+                <button onClick={() => setProfileUserId(null)} className="absolute top-3 right-3 rounded-full bg-black/30 p-1.5 text-white hover:bg-black/50">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              {/* Avatar */}
+              <div className="flex justify-center -mt-12">
+                <div className="h-24 w-24 rounded-full overflow-hidden bg-gradient-to-br from-sky-400 to-violet-500 ring-4 ring-white dark:ring-zinc-900 shadow-xl flex items-center justify-center">
+                  {profileMember?.avatarUrl ? (
+                    <img src={profileMember.avatarUrl} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="text-white text-3xl font-bold">
+                      {(profileMember?.displayName || profileMember?.username || '?').charAt(0).toUpperCase()}
+                    </span>
+                  )}
+                </div>
+              </div>
+              {/* Info */}
+              <div className="px-6 py-4 text-center">
+                <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">
+                  {profileMember?.displayName || profileMember?.username || profileUserId}
+                </h3>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 font-mono mt-1">{profileUserId}</p>
+              </div>
+              {/* Actions */}
+              {!isCurrentUser && (
+                <div className="px-6 pb-5 flex gap-2">
+                  <button
+                    onClick={() => {
+                      setProfileUserId(null);
+                      router.push(`/chat/${encodeURIComponent(profileUserId)}`);
+                    }}
+                    className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-sky-500 py-2.5 text-sm font-bold text-white hover:bg-sky-600 transition-colors"
+                  >
+                    <MessageSquare className="h-4 w-4" />
+                    Nhắn tin
+                  </button>
+                  <button
+                    onClick={() => { setProfileUserId(null); }}
+                    className="flex items-center justify-center gap-2 rounded-xl border border-zinc-200 dark:border-zinc-700 py-2.5 px-4 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+                  >
+                    <Phone className="h-4 w-4" />
+                    Gọi
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
     </div >
   );
 }
