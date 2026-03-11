@@ -12,6 +12,7 @@ import { t } from '@/lib/i18n';
 import { authUrl } from '@/lib/config';
 import LanguageSwitcher from '@/components/language-switcher';
 import { MobileBottomBar } from '@/components/mobile-bottom-bar';
+import { useThemeStore, ACCENT_THEMES, type AccentColor } from '@/lib/store/theme-store';
 
 type LoginEventItem = {
   id: string;
@@ -293,6 +294,36 @@ export default function SettingsPage() {
                         }`}
                     />
                   </button>
+                </div>
+                {/* Accent Color */}
+                <div className="flex items-center justify-between py-4 px-4 sm:px-6 sm:py-5 border-t border-zinc-200 dark:border-zinc-800">
+                  <div className="flex items-center gap-3">
+                    <div className="h-5 w-5 rounded-full accent-bg" />
+                    <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                      Màu chủ đạo
+                    </span>
+                  </div>
+                  <div className="flex gap-2">
+                    {(Object.keys(ACCENT_THEMES) as AccentColor[]).map((color) => {
+                      const selected = useThemeStore.getState().accent === color;
+                      const colorMap: Record<AccentColor, string> = {
+                        blue: 'bg-sky-500',
+                        emerald: 'bg-emerald-500',
+                        orange: 'bg-orange-500',
+                        rose: 'bg-rose-500',
+                        violet: 'bg-violet-500',
+                        amber: 'bg-amber-500',
+                      };
+                      return (
+                        <button
+                          key={color}
+                          onClick={() => useThemeStore.getState().setAccent(color)}
+                          className={`h-7 w-7 rounded-full ${colorMap[color]} transition-all ${selected ? 'ring-2 ring-offset-2 ring-zinc-900 dark:ring-white dark:ring-offset-zinc-900 scale-110' : 'hover:scale-110'}`}
+                          title={ACCENT_THEMES[color].label}
+                        />
+                      );
+                    })}
+                  </div>
                 </div>
               </dl>
             </div>

@@ -6,7 +6,16 @@
   --brand-primary: #29a0f4;
   --brand-primary-strong: #1784d8;
   --brand-soft: #e9f6ff;
+  --accent-hue: 199; /* sky-500 default hue */
 }
+
+/* Accent color themes */
+:root[data-accent="blue"] { --accent-hue: 199; --brand-primary: #0ea5e9; --brand-primary-strong: #0284c7; --brand-soft: #e0f2fe; }
+:root[data-accent="emerald"] { --accent-hue: 160; --brand-primary: #10b981; --brand-primary-strong: #059669; --brand-soft: #d1fae5; }
+:root[data-accent="orange"] { --accent-hue: 25; --brand-primary: #f97316; --brand-primary-strong: #ea580c; --brand-soft: #ffedd5; }
+:root[data-accent="rose"] { --accent-hue: 350; --brand-primary: #f43f5e; --brand-primary-strong: #e11d48; --brand-soft: #ffe4e6; }
+:root[data-accent="violet"] { --accent-hue: 263; --brand-primary: #8b5cf6; --brand-primary-strong: #7c3aed; --brand-soft: #ede9fe; }
+:root[data-accent="amber"] { --accent-hue: 38; --brand-primary: #f59e0b; --brand-primary-strong: #d97706; --brand-soft: #fef3c7; }
 
 @theme inline {
   --color-background: var(--background);
@@ -21,6 +30,11 @@
     --foreground: #e8f3ff;
     --brand-soft: #102030;
   }
+  :root[data-accent="emerald"] { --brand-soft: #052e16; }
+  :root[data-accent="orange"] { --brand-soft: #431407; }
+  :root[data-accent="rose"] { --brand-soft: #4c0519; }
+  :root[data-accent="violet"] { --brand-soft: #2e1065; }
+  :root[data-accent="amber"] { --brand-soft: #451a03; }
 }
 
 body {
@@ -60,4 +74,46 @@ body {
   ::-webkit-scrollbar-thumb:hover {
     background: #52525b;
   }
+}
+
+/* ─── Accent Color System ─────────────────────────────────── */
+/* These utility classes adapt to the chosen accent color */
+
+/* Sent message bubble */
+.accent-bubble {
+  background: var(--brand-primary) !important;
+}
+.accent-bubble-hover:hover {
+  background: var(--brand-primary-strong) !important;
+}
+
+/* Accent text */
+.accent-text {
+  color: var(--brand-primary) !important;
+}
+.accent-text-muted {
+  color: color-mix(in srgb, var(--brand-primary) 70%, transparent) !important;
+}
+
+/* Accent background soft */
+.accent-bg-soft {
+  background: var(--brand-soft) !important;
+}
+.accent-bg {
+  background: var(--brand-primary) !important;
+}
+
+/* Accent border */
+.accent-border {
+  border-color: var(--brand-primary) !important;
+}
+
+/* Accent ring */
+.accent-ring {
+  --tw-ring-color: var(--brand-primary) !important;
+}
+
+/* Gradient */
+.accent-gradient {
+  background: linear-gradient(135deg, var(--brand-primary), var(--brand-primary-strong)) !important;
 }

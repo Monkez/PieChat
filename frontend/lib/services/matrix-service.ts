@@ -2325,6 +2325,31 @@ class MatrixService {
     );
   }
 
+  // ─── Read Receipts ──────────────────────────────────
+  async sendReadReceipt(roomId: string, eventId: string): Promise<void> {
+    try {
+      await this.request(
+        `/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/receipt/m.read/${encodeURIComponent(eventId)}`,
+        { method: 'POST', body: '{}' },
+      );
+    } catch { /* silently fail */ }
+  }
+
+  async sendReadMarker(roomId: string, eventId: string): Promise<void> {
+    try {
+      await this.request(
+        `/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/read_markers`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            'm.fully_read': eventId,
+            'm.read': eventId,
+          }),
+        },
+      );
+    } catch { /* silently fail */ }
+  }
+
   // ─── Typing indicator ───────────────────────────────
   async sendTyping(roomId: string, typing: boolean, timeoutMs = 5000): Promise<void> {
     const userId = this.getCurrentUserId();

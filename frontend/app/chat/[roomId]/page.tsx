@@ -189,6 +189,11 @@ export default function RoomPage() {
           return merged;
         });
       }
+      // Send read receipt for the last message to clear unread badge
+      if (msgs.length > 0) {
+        const lastMsg = msgs[msgs.length - 1];
+        void matrixService.sendReadMarker(roomId, lastMsg.id);
+      }
       // Notify about new messages (only during silent polls, not initial load)
       if (silent && currentUser?.id) {
         notifyNewMessages(

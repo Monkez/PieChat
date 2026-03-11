@@ -121,18 +121,34 @@ export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoic
 
   // Typing debounce
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isTypingRef = useRef(false);
 
   const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setMessage(e.target.value);
+    const value = e.target.value;
+    setMessage(value);
     e.target.style.height = 'auto';
     e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
 
-    // Send typing indicator
-    onTyping?.(true);
+    // Send typing indicator immediately when starting to type
+    if (value.length > 0 && !isTypingRef.current) {
+      isTypingRef.current = true;
+      onTyping?.(true);
+    }
+
+    // If input is empty, stop typing immediately
+    if (value.length === 0 && isTypingRef.current) {
+      isTypingRef.current = false;
+      onTyping?.(false);
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      return;
+    }
+
+    // Reset the stop-typing timeout
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
+      isTypingRef.current = false;
       onTyping?.(false);
-    }, 3000);
+    }, 2000);
   };
 
   // ─── File Handling ────────────────────────────────────
