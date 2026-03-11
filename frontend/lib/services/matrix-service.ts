@@ -150,6 +150,7 @@ interface SyncResponse {
         state?: { events?: Array<{ type: string; state_key?: string; content: Record<string, unknown> }> };
         timeline?: { events?: Array<{ event_id: string; sender: string; type: string; content: Record<string, unknown>; origin_server_ts: number; state_key?: string }> };
         unread_notifications?: { notification_count?: number; highlight_count?: number };
+        ephemeral?: { events?: Array<{ type: string; content: Record<string, unknown> }> };
       }
     >;
     invite?: Record<
@@ -951,6 +952,16 @@ class MatrixService {
                 type: sdp.includes('m=video') ? 'video' : 'voice' as any,
                 timestamp: callInviteEvent.origin_server_ts
               };
+            }
+          }
+        }
+
+        // Parse ephemeral typing events
+        if (joinedRooms[roomId]?.ephemeral?.events) {
+          for (const ev of joinedRooms[roomId].ephemeral!.events!) {
+            if (ev.type === 'm.typing') {
+              const userIds = (ev.content?.user_ids as string[]) || [];
+              this.setTypingUsers(roomId, userIds);
             }
           }
         }

@@ -823,12 +823,21 @@ export function MessageBubble({
 
         {/* Reply-to reference */}
         {msg.replyTo && msg.replyTo.body && (
-          <div className={cn(
-            "mb-1 rounded-lg px-2.5 py-1.5 text-xs border-l-2 cursor-pointer",
-            isMe
-              ? "bg-sky-200/50 border-sky-400 dark:bg-sky-800/20 dark:border-sky-500"
-              : "bg-zinc-100 border-zinc-300 dark:bg-zinc-700/50 dark:border-zinc-500"
-          )}>
+          <div
+            onClick={() => {
+              const el = document.querySelector(`[data-msg-id="${msg.replyTo!.eventId}"]`);
+              if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                el.classList.add('ring-2', 'ring-sky-400', 'ring-offset-1');
+                setTimeout(() => el.classList.remove('ring-2', 'ring-sky-400', 'ring-offset-1'), 2000);
+              }
+            }}
+            className={cn(
+              "mb-1 rounded-lg px-2.5 py-1.5 text-xs border-l-2 cursor-pointer active:scale-[0.98] transition-transform",
+              isMe
+                ? "bg-sky-200/50 border-sky-400 dark:bg-sky-800/20 dark:border-sky-500"
+                : "bg-zinc-100 border-zinc-300 dark:bg-zinc-700/50 dark:border-zinc-500"
+            )}>
             <p className="font-bold text-[10px] text-sky-600 dark:text-sky-400 mb-0.5">
               {msg.replyTo.senderId.split(':')[0].replace('@', '')}
             </p>

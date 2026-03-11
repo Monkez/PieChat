@@ -436,6 +436,7 @@ export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoic
 
         <textarea
           ref={textareaRef}
+          data-chat-input
           value={message}
           onChange={handleInput}
           onKeyDown={handleKeyDown}

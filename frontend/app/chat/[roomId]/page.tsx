@@ -766,6 +766,11 @@ export default function RoomPage() {
         senderName: senderMember?.displayName || senderMember?.username || msg.senderId,
         content: msg.content,
       });
+      // Focus the text input so user can immediately type
+      setTimeout(() => {
+        const input = document.querySelector<HTMLTextAreaElement>('[data-chat-input]');
+        input?.focus();
+      }, 100);
     } else if (action === 'edit') {
       setReplyEdit({
         mode: 'edit',
@@ -1417,7 +1422,7 @@ export default function RoomPage() {
                 const showDateSeparator = !prevMsg || new Date(msg.timestamp).toDateString() !== new Date(prevMsg.timestamp).toDateString();
 
                 return (
-                  <div key={msg.id} className="flex flex-col w-full">
+                  <div key={msg.id} data-msg-id={msg.id} className="flex flex-col w-full">
                     {showDateSeparator && (
                       <div className="my-6 flex items-center justify-center">
                         <span className="rounded-full bg-zinc-100/80 border border-zinc-200/50 px-4 py-1 text-[11px] font-medium text-zinc-500 shadow-sm backdrop-blur dark:bg-zinc-800/80 dark:border-zinc-700/50 dark:text-zinc-400">

@@ -20,6 +20,7 @@ export function useWebRTC() {
     const peerConnection = useRef<RTCPeerConnection | null>(null);
     const localStream = useRef<MediaStream | null>(null);
     const processedEventIds = useRef<Set<string>>(new Set());
+    const pendingCandidates = useRef<RTCIceCandidateInit[]>([]);
 
     // ─── Cleanup ────────────────────────────────────────
     const cleanup = useCallback(() => {
@@ -31,6 +32,7 @@ export function useWebRTC() {
             localStream.current.getTracks().forEach(track => track.stop());
             localStream.current = null;
         }
+        pendingCandidates.current = [];
         setStream(null);
         setRemoteStream(null);
     }, [setStream, setRemoteStream]);
@@ -67,8 +69,10 @@ export function useWebRTC() {
         });
 
         pc.ontrack = (event) => {
-            console.log('[Call] Remote track received');
-            setRemoteStream(event.streams[0]);
+            console.log('[Call] Remote track received:', event.streams.length, 'streams');
+            if (event.streams && event.streams[0]) {
+                setRemoteStream(event.streams[0]);
+            }
         };
 
         pc.onicecandidate = (event) => {
@@ -125,6 +129,13 @@ export function useWebRTC() {
         const pc = createPeerConnection(stream);
         const sdp = currentOffer.offer || currentOffer;
         await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+
+        // Apply any pending ICE candidates that arrived before we set remote description
+        for (const c of pendingCandidates.current) {
+            await pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {});
+        }
+        pendingCandidates.current = [];
+
         const answerSdp = await pc.createAnswer();
         await pc.setLocalDescription(answerSdp);
 
@@ -135,17 +146,20 @@ export function useWebRTC() {
         acceptCall();
     }, [initLocalStream, createPeerConnection, acceptCall]);
 
-    // ─── Hang up ────────────────────────────────────────
+    // ─── Hang up / Decline ──────────────────────────────
     const handleHangup = useCallback(() => {
         const currentRoomId = useCallStore.getState().roomId;
         const currentCallId = useCallStore.getState().callId;
+        const currentStatus = useCallStore.getState().status;
         if (currentRoomId && currentCallId) {
-            void matrixService.sendCallEvent(currentRoomId, currentCallId, 'm.call.hangup', {
-                reason: 'user_hangup',
+            const eventType = currentStatus === 'incoming' ? 'm.call.hangup' : 'm.call.hangup';
+            void matrixService.sendCallEvent(currentRoomId, currentCallId, eventType, {
+                reason: currentStatus === 'incoming' ? 'user_busy' : 'user_hangup',
             });
         }
+        cleanup();
         endCall();
-    }, [endCall]);
+    }, [endCall, cleanup]);
 
     // ─── Toggle mute ────────────────────────────────────
     const toggleMute = useCallback(() => {
@@ -180,6 +194,7 @@ export function useWebRTC() {
         const pollInterval = setInterval(() => {
             const callEvents = matrixService.getLastCallEvents();
             const myUserId = typeof localStorage !== 'undefined' ? localStorage.getItem('matrix_user_id') : null;
+            const currentStatus = useCallStore.getState().status;
 
             for (const event of callEvents) {
                 // Skip own events
@@ -193,11 +208,11 @@ export function useWebRTC() {
                 processedEventIds.current.add(event.event_id);
 
                 // Handle remote answer (we are the caller)
-                if (event.type === 'm.call.answer' && status === 'dialing') {
+                if (event.type === 'm.call.answer' && (currentStatus === 'dialing' || currentStatus === 'active')) {
                     const pc = peerConnection.current;
                     if (pc && pc.signalingState === 'have-local-offer') {
                         const answerSdp = event.content.answer;
-                        void pc.setRemoteDescription(new RTCSessionDescription(answerSdp)).then(() => {
+                        void pc.setRemoteDescription(new RTCSessionDescription(answerSdp as RTCSessionDescriptionInit)).then(() => {
                             console.log('[Call] Remote answer set');
                             useCallStore.getState().acceptCall();
                         });
@@ -207,24 +222,28 @@ export function useWebRTC() {
                 // Handle remote ICE candidates
                 if (event.type === 'm.call.candidates') {
                     const pc = peerConnection.current;
+                    const candidates = (event.content.candidates || []) as RTCIceCandidateInit[];
                     if (pc && pc.remoteDescription) {
-                        const candidates = event.content.candidates || [];
                         for (const c of candidates) {
                             void pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {});
                         }
+                    } else {
+                        // Store for later if remote description not yet set
+                        pendingCandidates.current.push(...candidates);
                     }
                 }
 
                 // Handle remote hangup
                 if (event.type === 'm.call.hangup') {
                     console.log('[Call] Remote hangup');
+                    cleanup();
                     endCall();
                 }
             }
-        }, 1500);
+        }, 1000); // Poll faster for better responsiveness
 
         return () => clearInterval(pollInterval);
-    }, [status, endCall]);
+    }, [status, endCall, cleanup]);
 
     // Cleanup on unmount
     useEffect(() => {
