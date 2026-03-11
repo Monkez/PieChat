@@ -865,7 +865,7 @@ export default function ChatLayout({
       "flex-col lg:flex-row"
     )}>
       {/* Desktop: Vertical Navigation Rail (left side) */}
-      <nav className="hidden lg:flex w-16 flex-col items-center bg-[#0068ff] py-4 text-white dark:bg-[#0052cc] z-40 shrink-0">
+      <nav className="hidden lg:flex w-16 flex-col items-center py-4 text-white z-40 shrink-0" style={{ background: 'var(--accent-600)' }}>
         <div className="mb-6">
           <div className="h-12 w-12 overflow-hidden rounded-full border-2 border-white/20 shadow-sm">
             {currentUser?.avatarUrl ? (
@@ -1262,7 +1262,7 @@ export default function ChatLayout({
                         <span className={cn(
                           "truncate text-[13px] lg:text-xs pr-2",
                           room.unreadCount > 0
-                            ? "font-bold text-[#0068ff] dark:text-sky-400"
+                            ? "font-bold text-sky-600 dark:text-sky-400"
                             : "text-zinc-500 dark:text-zinc-400"
                         )}>
                           {room.lastMessage ? (

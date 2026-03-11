@@ -58,8 +58,8 @@ export function MobileBottomBar({ activeSection, onSectionChange }: MobileBottom
 
     return (
         <nav
-            className="lg:hidden fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around bg-[#0068ff] dark:bg-[#0052cc] text-white py-1"
-            style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+            className="lg:hidden fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around text-white py-1"
+            style={{ background: 'var(--accent-600)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
         >
             {tabs.map((tab) => {
                 const Icon = tab.icon;
