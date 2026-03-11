@@ -5,6 +5,7 @@ import { useCallStore } from '@/lib/store/call-store';
 import { useWebRTC } from '@/hooks/use-webrtc';
 import { Phone, PhoneOff, Video, VideoOff, Mic, MicOff, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { callSound } from '@/lib/call-sound';
 
 export function CallOverlay() {
     const { status, type, remoteUser, stream, remoteStream } = useCallStore();
@@ -66,6 +67,28 @@ export function CallOverlay() {
             setIsMuted(false);
             setIsCameraOff(false);
         }
+    }, [status]);
+
+    // ─── Call Sounds ─────────────────────────────────
+    useEffect(() => {
+        if (status === 'incoming') {
+            callSound.play('ringtone');
+        } else if (status === 'dialing') {
+            callSound.play('dialing');
+        } else if (status === 'active') {
+            callSound.stop();
+        } else if (status === 'none') {
+            // Play hangup beep if a sound was playing (call just ended)
+            if (callSound.isPlaying()) {
+                callSound.stop();
+                callSound.play('hangup');
+            }
+        }
+        return () => {
+            if (status === 'none') {
+                // Don't stop hangup on cleanup
+            }
+        };
     }, [status]);
 
     if (status === 'none') return null;

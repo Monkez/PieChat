@@ -53,6 +53,8 @@
   --accent-600: #d97706; --accent-700: #b45309; --accent-800: #92400e;
   --accent-900: #78350f;
 }
+/* ─── Theme: Custom (set via JS) ──────────────────── */
+/* Custom accent vars are injected dynamically by AccentProvider */
 
 @theme inline {
   --color-background: var(--background);

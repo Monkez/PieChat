@@ -12,7 +12,7 @@ import { t } from '@/lib/i18n';
 import { authUrl } from '@/lib/config';
 import LanguageSwitcher from '@/components/language-switcher';
 import { MobileBottomBar } from '@/components/mobile-bottom-bar';
-import { useThemeStore, ACCENT_THEMES, type AccentColor } from '@/lib/store/theme-store';
+import { useThemeStore, PRESET_COLORS, type AccentColor } from '@/lib/store/theme-store';
 
 type LoginEventItem = {
   id: string;
@@ -38,7 +38,7 @@ export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
   const { currentUser, logout } = useMatrixStore();
   const { language } = useUiStore();
-  const { accent, setAccent } = useThemeStore();
+  const { accent, setAccent, customColor, setCustomColor } = useThemeStore();
   const router = useRouter();
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const [editingName, setEditingName] = useState(false);
@@ -297,33 +297,39 @@ export default function SettingsPage() {
                   </button>
                 </div>
                 {/* Accent Color */}
-                <div className="flex items-center justify-between py-4 px-4 sm:px-6 sm:py-5 border-t border-zinc-200 dark:border-zinc-800">
-                  <div className="flex items-center gap-3">
-                    <div className="h-5 w-5 rounded-full accent-bg" />
-                    <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                      Màu chủ đạo
-                    </span>
+                <div className="py-4 px-4 sm:px-6 sm:py-5 border-t border-zinc-200 dark:border-zinc-800">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="h-5 w-5 rounded-full" style={{ background: 'var(--accent-500)' }} />
+                      <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                        Màu chủ đạo
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex gap-2">
-                    {(Object.keys(ACCENT_THEMES) as AccentColor[]).map((color) => {
-                      const selected = accent === color;
-                      const colorMap: Record<AccentColor, string> = {
-                        blue: 'bg-sky-500',
-                        emerald: 'bg-emerald-500',
-                        orange: 'bg-orange-500',
-                        rose: 'bg-rose-500',
-                        violet: 'bg-violet-500',
-                        amber: 'bg-amber-500',
-                      };
-                      return (
-                        <button
-                          key={color}
-                          onClick={() => setAccent(color)}
-                          className={`h-7 w-7 rounded-full ${colorMap[color]} transition-all ${selected ? 'ring-2 ring-offset-2 ring-zinc-900 dark:ring-white dark:ring-offset-zinc-900 scale-110' : 'hover:scale-110'}`}
-                          title={ACCENT_THEMES[color].label}
-                        />
-                      );
-                    })}
+                  <div className="flex flex-wrap gap-2 items-center">
+                    {PRESET_COLORS.map((preset) => (
+                      <button
+                        key={preset.id}
+                        onClick={() => setAccent(preset.id)}
+                        className={`h-8 w-8 rounded-full transition-all ${accent === preset.id ? 'ring-2 ring-offset-2 ring-zinc-900 dark:ring-white dark:ring-offset-zinc-900 scale-110' : 'hover:scale-110'}`}
+                        style={{ background: preset.color }}
+                        title={preset.label}
+                      />
+                    ))}
+                    {/* Custom color picker */}
+                    <label
+                      className={`relative h-8 w-8 rounded-full cursor-pointer transition-all overflow-hidden border-2 border-dashed border-zinc-300 dark:border-zinc-600 hover:scale-110 flex items-center justify-center ${accent === 'custom' ? 'ring-2 ring-offset-2 ring-zinc-900 dark:ring-white dark:ring-offset-zinc-900 scale-110 border-solid' : ''}`}
+                      style={accent === 'custom' ? { background: customColor } : {}}
+                      title="Chọn màu tùy chỉnh"
+                    >
+                      {accent !== 'custom' && <span className="text-xs">🎨</span>}
+                      <input
+                        type="color"
+                        value={customColor}
+                        onChange={(e) => setCustomColor(e.target.value)}
+                        className="absolute inset-0 opacity-0 cursor-pointer"
+                      />
+                    </label>
                   </div>
                 </div>
               </dl>

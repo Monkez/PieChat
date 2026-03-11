@@ -3,6 +3,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useCallStore } from '@/lib/store/call-store';
 import { matrixService } from '@/lib/services/matrix-service';
+import { callSound } from '@/lib/call-sound';
 
 const ICE_SERVERS: RTCConfiguration = {
     iceServers: [
@@ -152,6 +153,7 @@ export function useWebRTC() {
         const currentCallId = useCallStore.getState().callId;
         const currentStatus = useCallStore.getState().status;
         // Always cleanup and end call first, then try to send hangup event
+        callSound.stop();
         cleanup();
         useCallStore.getState().endCall();
         // Send hangup event in background (don't block UI)
