@@ -12,6 +12,7 @@ import { t } from '@/lib/i18n';
 import { ContactCard, ContactCardData, detectPhoneNumbers, isPhoneOnlyMessage } from './contact-card';
 import { PollCard, PollInfo, PollVote } from './poll-card';
 import { ReminderCard, ReminderInfo } from './reminder-card';
+import { LinkPreviews } from './link-preview';
 
 interface MessageBubbleProps {
   message: Message;
@@ -32,6 +33,7 @@ interface MessageBubbleProps {
   onPollVote?: (pollId: string, eventId: string, optionIds: string[]) => void;
   currentUserId?: string;
   pollVotes?: Record<string, PollVote[]>;
+  onButtonClick?: (msgId: string, buttonId: string, label: string) => void;
 }
 
 const REACTION_ICONS: Record<string, string> = {
@@ -313,6 +315,7 @@ export function MessageBubble({
   onPollVote,
   currentUserId,
   pollVotes,
+  onButtonClick,
 }: MessageBubbleProps) {
   const { language } = useUiStore();
   const [showAbove, setShowAbove] = useState(false);
@@ -852,8 +855,45 @@ export function MessageBubble({
           </div>
         ) : (
           /* Text Message Content */
-          <div className="break-words leading-snug text-[14px] lg:text-sm">
-            {highlightContent(msg.content)}
+          <div>
+            <div className="break-words leading-snug text-[14px] lg:text-sm">
+              {highlightContent(msg.content)}
+            </div>
+            <LinkPreviews text={msg.content} isMe={isMe} />
+            {/* Inline Buttons */}
+            {msg.inlineButtons && msg.inlineButtons.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {msg.inlineButtons.map((btn) => {
+                  const styleClass = btn.style === 'danger'
+                    ? 'bg-rose-100 text-rose-700 hover:bg-rose-200 dark:bg-rose-900/30 dark:text-rose-400 dark:hover:bg-rose-900/50 border-rose-200 dark:border-rose-800/40'
+                    : btn.style === 'secondary'
+                      ? 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-700/50 dark:text-zinc-300 dark:hover:bg-zinc-700 border-zinc-200 dark:border-zinc-600'
+                      : 'bg-sky-100 text-sky-700 hover:bg-sky-200 dark:bg-sky-900/30 dark:text-sky-400 dark:hover:bg-sky-900/50 border-sky-200 dark:border-sky-800/40';
+                  if (btn.url) {
+                    return (
+                      <a
+                        key={btn.id}
+                        href={btn.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={cn('inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all active:scale-95', styleClass)}
+                      >
+                        {btn.label} ↗
+                      </a>
+                    );
+                  }
+                  return (
+                    <button
+                      key={btn.id}
+                      onClick={() => onButtonClick?.(msg.id, btn.id, btn.label)}
+                      className={cn('inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all active:scale-95', styleClass)}
+                    >
+                      {btn.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 

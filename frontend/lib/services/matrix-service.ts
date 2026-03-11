@@ -56,6 +56,7 @@ export interface Message {
   uploadProgress?: number;
   replyTo?: { eventId: string; senderId: string; body: string };
   edited?: boolean;
+  inlineButtons?: Array<{ id: string; label: string; action?: string; url?: string; style?: 'primary' | 'secondary' | 'danger' }>;
 }
 
 export interface UserDirectoryAccount {
@@ -1551,6 +1552,7 @@ class MatrixService {
             thumbnailUrl,
             replyTo,
             edited,
+            inlineButtons: (event.content?.['io.piechat.buttons'] as Message['inlineButtons']) || undefined,
           };
         })
         .filter(Boolean)
@@ -2340,6 +2342,85 @@ class MatrixService {
     } catch {
       return { presence: 'offline' };
     }
+  }
+
+  // ─── Profile editing ─────────────────────────────────
+  async setDisplayName(displayName: string): Promise<void> {
+    const userId = this.getCurrentUserId();
+    if (!userId) return;
+    await this.request(
+      `/_matrix/client/v3/profile/${encodeURIComponent(userId)}/displayname`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ displayname: displayName }),
+      },
+    );
+  }
+
+  async setAvatarUrl(avatarMxcUrl: string): Promise<void> {
+    const userId = this.getCurrentUserId();
+    if (!userId) return;
+    await this.request(
+      `/_matrix/client/v3/profile/${encodeURIComponent(userId)}/avatar_url`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ avatar_url: avatarMxcUrl }),
+      },
+    );
+  }
+
+  async uploadAvatar(file: File): Promise<string> {
+    const mxcUrl = await this.uploadMedia(file, file.name);
+    await this.setAvatarUrl(mxcUrl);
+    return mxcUrl.startsWith('mxc://')
+      ? `${this.baseUrl}/_matrix/media/v3/download/${mxcUrl.slice(6)}`
+      : mxcUrl;
+  }
+
+  // ─── Inline Buttons (for Bot/AI assistant) ───────────
+  async sendMessageWithButtons(
+    roomId: string,
+    body: string,
+    buttons: Array<{ id: string; label: string; action?: string; url?: string; style?: 'primary' | 'secondary' | 'danger' }>,
+  ): Promise<Message> {
+    const txnId = `btn-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const eventRes = await this.request<{ event_id: string }>(
+      `/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/send/m.room.message/${txnId}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({
+          msgtype: 'm.text',
+          body,
+          'io.piechat.buttons': buttons,
+        }),
+      },
+    );
+
+    const msg: Message = {
+      id: eventRes.event_id,
+      roomId,
+      senderId: this.getCurrentUserId() || '',
+      content: body,
+      timestamp: Date.now(),
+      status: 'sent',
+      inlineButtons: buttons,
+    };
+    return msg;
+  }
+
+  async sendButtonClick(roomId: string, messageId: string, buttonId: string, label: string): Promise<void> {
+    const txnId = `btnclk-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    await this.request(
+      `/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/send/io.piechat.button_click/${txnId}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({
+          message_id: messageId,
+          button_id: buttonId,
+          label,
+        }),
+      },
+    );
   }
 }
 

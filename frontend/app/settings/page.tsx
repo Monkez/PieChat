@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Bell, Shield, Moon, LogOut, ArrowLeft } from 'lucide-react';
+import { useEffect, useState, useRef } from 'react';
+import { Bell, Shield, Moon, LogOut, ArrowLeft, Check, Camera } from 'lucide-react';
 import Link from 'next/link';
 import { useTheme } from 'next-themes';
 import { useMatrixStore } from '@/lib/store/matrix-store';
+import { matrixService } from '@/lib/services/matrix-service';
 import { useRouter } from 'next/navigation';
 import { useUiStore } from '@/lib/store/ui-store';
 import { t } from '@/lib/i18n';
@@ -37,6 +38,12 @@ export default function SettingsPage() {
   const { currentUser, logout } = useMatrixStore();
   const { language } = useUiStore();
   const router = useRouter();
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const [editingName, setEditingName] = useState(false);
+  const [newDisplayName, setNewDisplayName] = useState('');
+  const [savingName, setSavingName] = useState(false);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [profileNotice, setProfileNotice] = useState<string | null>(null);
 
 
 
@@ -149,7 +156,49 @@ export default function SettingsPage() {
                     {t(language, 'settingsDisplayName')}
                   </dt>
                   <dd className="mt-1 text-sm text-zinc-900 dark:text-zinc-100 sm:col-span-2 sm:mt-0">
-                    {currentUser?.displayName || currentUser?.username || 'guest'}
+                    {editingName ? (
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={newDisplayName}
+                          onChange={e => setNewDisplayName(e.target.value)}
+                          className="flex-1 rounded-lg border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+                          autoFocus
+                        />
+                        <button
+                          disabled={savingName || !newDisplayName.trim()}
+                          onClick={async () => {
+                            setSavingName(true);
+                            try {
+                              await matrixService.setDisplayName(newDisplayName.trim());
+                              setProfileNotice('Đã cập nhật tên hiển thị!');
+                              setEditingName(false);
+                            } catch {
+                              setProfileNotice('Lỗi khi cập nhật tên');
+                            }
+                            setSavingName(false);
+                            setTimeout(() => setProfileNotice(null), 3000);
+                          }}
+                          className="flex h-8 w-8 items-center justify-center rounded-full bg-sky-100 text-sky-600 hover:bg-sky-200 dark:bg-sky-900/30 dark:text-sky-400 disabled:opacity-50"
+                        >
+                          <Check className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setNewDisplayName(currentUser?.displayName || currentUser?.username || '');
+                          setEditingName(true);
+                        }}
+                        className="hover:text-sky-600 dark:hover:text-sky-400 transition-colors"
+                      >
+                        {currentUser?.displayName || currentUser?.username || 'guest'}
+                        <span className="ml-2 text-xs text-zinc-400">✏️</span>
+                      </button>
+                    )}
+                    {profileNotice && (
+                      <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">{profileNotice}</p>
+                    )}
                   </dd>
                 </div>
                 <div className="py-4 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6 sm:py-5">
@@ -158,11 +207,40 @@ export default function SettingsPage() {
                   </dt>
                   <dd className="mt-1 text-sm text-zinc-900 dark:text-zinc-100 sm:col-span-2 sm:mt-0">
                     <div className="flex items-center gap-4">
-                      <div className="h-10 w-10 rounded-full bg-zinc-200 dark:bg-zinc-700">
-                        {currentUser?.avatarUrl && <img src={currentUser.avatarUrl} alt="Avatar" className="rounded-full w-full h-full" />}
+                      <div className="relative h-12 w-12 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden group">
+                        {currentUser?.avatarUrl && <img src={currentUser.avatarUrl} alt="Avatar" className="rounded-full w-full h-full object-cover" />}
+                        <button
+                          onClick={() => avatarInputRef.current?.click()}
+                          className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-full"
+                        >
+                          <Camera className="h-4 w-4 text-white" />
+                        </button>
                       </div>
-                      <button className="text-sm font-medium text-black hover:text-zinc-700 dark:text-white dark:hover:text-zinc-300">
-                        {t(language, 'settingsChange')}
+                      <input
+                        ref={avatarInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          setAvatarUploading(true);
+                          try {
+                            await matrixService.uploadAvatar(file);
+                            setProfileNotice('Đã cập nhật ảnh đại diện!');
+                          } catch {
+                            setProfileNotice('Lỗi khi tải ảnh');
+                          }
+                          setAvatarUploading(false);
+                          setTimeout(() => setProfileNotice(null), 3000);
+                        }}
+                      />
+                      <button
+                        onClick={() => avatarInputRef.current?.click()}
+                        disabled={avatarUploading}
+                        className="text-sm font-medium text-black hover:text-zinc-700 dark:text-white dark:hover:text-zinc-300 disabled:opacity-50"
+                      >
+                        {avatarUploading ? 'Đang tải...' : t(language, 'settingsChange')}
                       </button>
                     </div>
                   </dd>

@@ -4,9 +4,10 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Send, Paperclip, MoreVertical, Phone, Video, Search, UserPlus, Crown, ShieldCheck, Trash2, Users, GripVertical, Shield, MessageSquare, Plus, ArrowLeft } from 'lucide-react';
+import { Send, Paperclip, MoreVertical, Phone, Video, Search, UserPlus, Crown, ShieldCheck, Trash2, Users, GripVertical, Shield, MessageSquare, Plus, ArrowLeft, FolderOpen } from 'lucide-react';
 import { MessageBubble } from '@/components/chat/message-bubble';
 import { ChatInput, type ReplyEditState } from '@/components/chat/chat-input';
+import { MediaGallery } from '@/components/chat/media-gallery';
 import { useMatrixStore } from '@/lib/store/matrix-store';
 import { matrixService, Message, UserDirectoryAccount } from '@/lib/services/matrix-service';
 import { useUiStore } from '@/lib/store/ui-store';
@@ -64,6 +65,7 @@ export default function RoomPage() {
   const [replyEdit, setReplyEdit] = useState<ReplyEditState | null>(null);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const [remotePresence, setRemotePresence] = useState<string>('offline');
+  const [isGalleryOpen, setIsGalleryOpen] = useState(false);
 
   // Enable notification checker
   useChatNotifications();
@@ -977,6 +979,16 @@ export default function RoomPage() {
                     <UserPlus className="h-4 w-4" />
                     {t(language, 'chatManageMembers')}
                   </button>
+                  <button
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      setIsGalleryOpen(true);
+                    }}
+                    className="flex w-full items-center gap-2 px-4 py-2 text-sm text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-700/50"
+                  >
+                    <FolderOpen className="h-4 w-4" />
+                    Kho lưu trữ
+                  </button>
                   {(canManageGroup || canManageChannel) && (
                     <button
                       onClick={() => {
@@ -1451,6 +1463,9 @@ export default function RoomPage() {
                       onPollVote={handlePollVote}
                       currentUserId={currentUserId}
                       pollVotes={pollVotes}
+                      onButtonClick={(msgId, btnId, label) => {
+                        matrixService.sendButtonClick(roomId, msgId, btnId, label).catch(console.error);
+                      }}
                     />
                   </div>
                 );
@@ -1528,6 +1543,13 @@ export default function RoomPage() {
         isOpen={isReminderDialogOpen}
         onClose={() => setIsReminderDialogOpen(false)}
         onCreateReminder={handleCreateReminder}
+      />
+
+      {/* Media Gallery */}
+      <MediaGallery
+        isOpen={isGalleryOpen}
+        onClose={() => setIsGalleryOpen(false)}
+        messages={messages}
       />
     </div >
   );
