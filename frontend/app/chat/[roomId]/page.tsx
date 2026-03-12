@@ -1459,8 +1459,8 @@ export default function RoomPage() {
 
       {
         room?.type === 'channel' ? (
-          <div className="flex-1 overflow-y-auto bg-white/50 p-3 backdrop-blur-sm dark:bg-black/40 sm:p-6 lg:p-10">
-            <div className="mx-auto max-w-2xl">
+          <div className="flex-1 min-w-0 overflow-x-hidden overflow-y-auto bg-white/50 p-3 backdrop-blur-sm dark:bg-black/40 sm:p-6 lg:p-10">
+            <div className="mx-auto w-full max-w-2xl">
               <div className="mb-8 flex flex-col items-center text-center sm:mb-10">
                 <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-tr from-sky-500 to-blue-700 text-2xl font-bold text-white shadow-xl shadow-sky-500/20 sm:mb-6 sm:h-24 sm:w-24 sm:text-3xl">
                   {room.name.charAt(0).toUpperCase()}
@@ -1473,9 +1473,9 @@ export default function RoomPage() {
                 </p>
               </div>
 
-              <div className="grid gap-6 sm:gap-8 lg:grid-cols-2">
-                <div className="space-y-4 sm:space-y-6">
-                  <section className="rounded-2xl border border-sky-100 bg-white p-4 shadow-sm dark:border-sky-900/40 dark:bg-zinc-900/60 sm:p-6">
+              <div className="grid gap-6 sm:gap-8 lg:grid-cols-2 min-w-0">
+                <div className="space-y-4 sm:space-y-6 min-w-0">
+                  <section className="overflow-hidden rounded-2xl border border-sky-100 bg-white p-4 shadow-sm dark:border-sky-900/40 dark:bg-zinc-900/60 sm:p-6">
                     <h3 className="mb-4 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-zinc-400">
                       <Crown className="h-4 w-4" />
                       {t(language, 'chatRoomTopic')}
@@ -1485,7 +1485,7 @@ export default function RoomPage() {
                     </p>
                   </section>
 
-                  <section className="rounded-2xl border border-sky-100 bg-white p-4 shadow-sm dark:border-sky-900/40 dark:bg-zinc-900/60 sm:p-6">
+                  <section className="overflow-hidden rounded-2xl border border-sky-100 bg-white p-4 shadow-sm dark:border-sky-900/40 dark:bg-zinc-900/60 sm:p-6">
                     <div className="mb-4 flex items-center justify-between">
                       <div className="flex flex-col gap-1">
                         <h3 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-zinc-400">
@@ -1596,7 +1596,7 @@ export default function RoomPage() {
                   </section>
                 </div>
 
-                <section className="rounded-2xl border border-sky-100 bg-white p-4 shadow-sm dark:border-sky-900/40 dark:bg-zinc-900/60 sm:p-6">
+                <section className="overflow-hidden rounded-2xl border border-sky-100 bg-white p-4 shadow-sm dark:border-sky-900/40 dark:bg-zinc-900/60 sm:p-6 min-w-0">
                   <div className="mb-4 flex items-center justify-between">
                     <h3 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-zinc-400">
                       <UserPlus className="h-4 w-4" />
