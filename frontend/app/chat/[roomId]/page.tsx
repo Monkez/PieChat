@@ -877,7 +877,7 @@ export default function RoomPage() {
 
   return (
     <div
-      className="flex h-full min-h-0 flex-col relative"
+      className="flex h-[100dvh] lg:h-full min-h-0 flex-col relative"
       onDragEnter={(e) => {
         e.preventDefault();
         e.stopPropagation();

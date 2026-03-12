@@ -873,7 +873,7 @@ export default function ChatLayout({
 
   return (
     <div className={cn(
-      "flex h-screen overflow-hidden bg-white dark:bg-black",
+      "flex h-[100dvh] overflow-hidden bg-white dark:bg-black",
       "flex-col lg:flex-row"
     )}>
       {/* Desktop: Vertical Navigation Rail (left side) */}
