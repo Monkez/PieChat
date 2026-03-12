@@ -1780,6 +1780,11 @@ export default function RoomPage() {
                     void handleSendMessage(content);
                   }, delay);
                 }}
+                members={room?.members.map(m => ({
+                  id: m.id,
+                  displayName: m.displayName || m.username,
+                  username: m.username,
+                }))}
               />
             </div>
           </>

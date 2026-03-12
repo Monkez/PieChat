@@ -1,9 +1,15 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Paperclip, Smile, Mic, Square, FolderOpen, File, X, Loader2, Contact, BarChart3, AlarmClock, Reply, Pencil, Clock } from 'lucide-react';
+import { Send, Paperclip, Smile, Mic, Square, FolderOpen, File, X, Loader2, Contact, BarChart3, AlarmClock, Reply, Pencil, Clock, AtSign } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { StickerPicker } from './sticker-picker';
+
+export interface MentionMember {
+  id: string;       // @user:domain
+  displayName: string;
+  username: string;
+}
 
 export interface ReplyEditState {
   mode: 'reply' | 'edit';
@@ -29,9 +35,10 @@ interface ChatInputProps {
   placeholder?: string;
   disabled?: boolean;
   onScheduleMessage?: (content: string, sendAt: number) => void;
+  members?: MentionMember[];
 }
 
-export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoice, onSendContact, onSendSticker, onOpenPollDialog, onOpenReminderDialog, onTyping, replyEdit, onCancelReplyEdit, onEditMessage, onReplyMessage, placeholder, disabled, onScheduleMessage }: ChatInputProps) {
+export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoice, onSendContact, onSendSticker, onOpenPollDialog, onOpenReminderDialog, onTyping, replyEdit, onCancelReplyEdit, onEditMessage, onReplyMessage, placeholder, disabled, onScheduleMessage, members }: ChatInputProps) {
   const [message, setMessage] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -40,6 +47,12 @@ export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoic
   const [isStickerOpen, setIsStickerOpen] = useState(false);
   const [isScheduleOpen, setIsScheduleOpen] = useState(false);
   const attachMenuRef = useRef<HTMLDivElement>(null);
+
+  // Mention state
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const mentionStartPos = useRef<number>(-1);
+  const mentionRef = useRef<HTMLDivElement>(null);
 
   // Voice recording state
   const [isRecording, setIsRecording] = useState(false);
@@ -115,6 +128,30 @@ export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoic
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    // Mention navigation
+    if (mentionQuery !== null && filteredMembers.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setMentionIndex(i => (i + 1) % filteredMembers.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setMentionIndex(i => (i - 1 + filteredMembers.length) % filteredMembers.length);
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        insertMention(filteredMembers[mentionIndex]);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeMention();
+        return;
+      }
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSubmit();
@@ -151,7 +188,58 @@ export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoic
       isTypingRef.current = false;
       onTyping?.(false);
     }, 2000);
+
+    // Mention detection: find '@' before cursor
+    detectMention(value, e.target.selectionStart ?? value.length);
   };
+
+  // ─── Mention Helpers ──────────────────────────────────
+  const filteredMembers = (members || []).filter(m => {
+    if (mentionQuery === null) return false;
+    if (mentionQuery === '') return true; // show all on just '@'
+    const q = mentionQuery.toLowerCase();
+    return m.displayName.toLowerCase().includes(q) || m.username.toLowerCase().includes(q);
+  }).slice(0, 8);
+
+  function detectMention(text: string, cursorPos: number) {
+    // Look backwards from cursor for '@'
+    const before = text.slice(0, cursorPos);
+    const match = before.match(/@([^@\s]*)$/);
+    if (match) {
+      mentionStartPos.current = cursorPos - match[0].length;
+      setMentionQuery(match[1]);
+      setMentionIndex(0);
+    } else {
+      closeMention();
+    }
+  }
+
+  function closeMention() {
+    setMentionQuery(null);
+    setMentionIndex(0);
+    mentionStartPos.current = -1;
+  }
+
+  function insertMention(member: MentionMember) {
+    const startPos = mentionStartPos.current;
+    if (startPos < 0) return;
+    const cursorPos = textareaRef.current?.selectionStart ?? message.length;
+    const before = message.slice(0, startPos);
+    const after = message.slice(cursorPos);
+    const mentionText = `@${member.displayName} `;
+    const newMessage = before + mentionText + after;
+    setMessage(newMessage);
+    closeMention();
+    // Set cursor after mention
+    requestAnimationFrame(() => {
+      if (textareaRef.current) {
+        const pos = before.length + mentionText.length;
+        textareaRef.current.selectionStart = pos;
+        textareaRef.current.selectionEnd = pos;
+        textareaRef.current.focus();
+      }
+    });
+  }
 
   // ─── File Handling ────────────────────────────────────
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -522,6 +610,40 @@ export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoic
           disabled={disabled}
           className="max-h-[120px] min-h-[28px] lg:min-h-[32px] flex-1 resize-none bg-transparent py-1 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none dark:text-zinc-100 scrollbar-hide"
         />
+
+        {/* Mention Dropdown */}
+        {mentionQuery !== null && filteredMembers.length > 0 && (
+          <div
+            ref={mentionRef}
+            className="absolute bottom-full left-0 right-0 mb-1 max-h-[240px] overflow-y-auto rounded-xl border border-zinc-200 bg-white shadow-xl dark:border-zinc-700 dark:bg-zinc-900 animate-in fade-in slide-in-from-bottom-2 duration-150 z-50"
+          >
+            {filteredMembers.map((member, idx) => (
+              <button
+                key={member.id}
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault(); // prevent blur
+                  insertMention(member);
+                }}
+                className={cn(
+                  "flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors",
+                  idx === mentionIndex
+                    ? "bg-sky-50 dark:bg-sky-900/30"
+                    : "hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                )}
+              >
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sky-100 text-xs font-bold text-sky-700 dark:bg-sky-900/40 dark:text-sky-300">
+                  {member.displayName.charAt(0).toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-zinc-900 dark:text-zinc-100 truncate">{member.displayName}</p>
+                  <p className="text-[11px] text-zinc-400 dark:text-zinc-500 truncate">@{member.username}</p>
+                </div>
+                <AtSign className="h-3.5 w-3.5 shrink-0 text-zinc-300 dark:text-zinc-600" />
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className="flex shrink-0 items-center gap-0.5 self-end">
           <div className="relative">

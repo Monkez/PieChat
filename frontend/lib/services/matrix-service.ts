@@ -1680,14 +1680,65 @@ class MatrixService {
 
   async sendMessage(roomId: string, content: string): Promise<Message> {
     const txnId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    // Detect @mentions and build formatted_body with Matrix mention pills
+    const mentionRegex = /@([\w\u00C0-\u024F\u1E00-\u1EFF\s]+?)(?=\s|$|[.,!?;:])/g;
+    const hasMentions = mentionRegex.test(content);
+    mentionRegex.lastIndex = 0; // reset after test
+
+    let body: Record<string, unknown> = {
+      msgtype: 'm.text',
+      body: content,
+    };
+
+    if (hasMentions) {
+      // Build HTML formatted_body with mention pills
+      let htmlBody = content
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+
+      // Get room members to resolve mentions
+      try {
+        const membersResp = await this.request<{ joined: Record<string, { display_name?: string }> }>(
+          `/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/joined_members`,
+          { method: 'GET' },
+        );
+        const members = membersResp.joined || {};
+
+        // Replace @displayName with Matrix mention pill
+        const mentionPillRegex = /@([\w\u00C0-\u024F\u1E00-\u1EFF\s]+?)(?=\s|$|[.,!?;:])/g;
+        htmlBody = htmlBody.replace(mentionPillRegex, (match, name) => {
+          const trimmedName = name.trim().toLowerCase();
+          // Find matching member
+          for (const [userId, info] of Object.entries(members)) {
+            const displayName = (info.display_name || userId.split(':')[0].replace('@', '')).toLowerCase();
+            const username = userId.split(':')[0].replace('@', '').toLowerCase();
+            if (displayName === trimmedName || username === trimmedName) {
+              return `<a href="https://matrix.to/#/${userId}">${match}</a>`;
+            }
+          }
+          return match; // no match found, keep plain text
+        });
+
+        htmlBody = htmlBody.replace(/\n/g, '<br/>');
+
+        body = {
+          msgtype: 'm.text',
+          body: content,
+          format: 'org.matrix.custom.html',
+          formatted_body: htmlBody,
+        };
+      } catch {
+        // If member lookup fails, send without formatted_body
+      }
+    }
+
     const response = await this.request<{ event_id: string }>(
       `/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/send/m.room.message/${txnId}`,
       {
         method: 'PUT',
-        body: JSON.stringify({
-          msgtype: 'm.text',
-          body: content,
-        }),
+        body: JSON.stringify(body),
       },
     );
     const userId = typeof window !== 'undefined' ? localStorage.getItem('matrix_user_id') || 'unknown' : 'unknown';

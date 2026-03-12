@@ -537,18 +537,55 @@ export function MessageBubble({
   };
 
   const highlightContent = (content: string) => {
+    // First split by @mentions
+    const mentionRegex = /@([\w\u00C0-\u024F\u1E00-\u1EFF\s]+?)(?=\s|$|[.,!?;:])/g;
+    const parts: Array<{ type: 'text' | 'mention'; value: string }> = [];
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+
+    while ((match = mentionRegex.exec(content)) !== null) {
+      if (match.index > lastIndex) {
+        parts.push({ type: 'text', value: content.slice(lastIndex, match.index) });
+      }
+      parts.push({ type: 'mention', value: match[0] });
+      lastIndex = match.index + match[0].length;
+    }
+    if (lastIndex < content.length) {
+      parts.push({ type: 'text', value: content.slice(lastIndex) });
+    }
+
     const keyword = searchQuery?.trim();
-    if (!keyword) return content;
-    const parts = content.split(new RegExp(`(${keyword})`, 'gi'));
+
+    const highlightSearch = (text: string, key: string) => {
+      if (!keyword) return <span key={key}>{text}</span>;
+      const searchParts = text.split(new RegExp(`(${keyword})`, 'gi'));
+      return (
+        <span key={key}>
+          {searchParts.map((part, i) =>
+            part.toLowerCase() === keyword.toLowerCase() ? (
+              <span key={i} className="bg-yellow-200/80 px-0.5 rounded text-zinc-900 font-medium">
+                {part}
+              </span>
+            ) : (
+              part
+            )
+          )}
+        </span>
+      );
+    };
+
     return (
       <>
         {parts.map((part, i) =>
-          part.toLowerCase() === keyword.toLowerCase() ? (
-            <span key={i} className="bg-yellow-200/80 px-0.5 rounded text-zinc-900 font-medium">
-              {part}
+          part.type === 'mention' ? (
+            <span
+              key={i}
+              className="inline-block rounded-md bg-sky-100 px-1 py-0.5 text-sky-700 font-semibold dark:bg-sky-900/40 dark:text-sky-300 cursor-default"
+            >
+              {part.value}
             </span>
           ) : (
-            part
+            highlightSearch(part.value, `t${i}`)
           )
         )}
       </>
