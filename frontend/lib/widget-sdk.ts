@@ -128,10 +128,11 @@ export function createChartWidget(config: ChartConfig): WidgetPayload {
   const script = `
     (function() {
       const data = ${JSON.stringify({ type, labels, datasets, showLegend })};
-      const container = document.getElementById('chart');
-      const w = container.offsetWidth;
-      const h = 180;
       const colors = ${JSON.stringify(CHART_COLORS)};
+      function render() {
+        const container = document.getElementById('chart');
+        const w = container.offsetWidth || document.documentElement.clientWidth || 320;
+        const h = 180;
 
       if (data.type === 'bar' || data.type === 'line' || data.type === 'area') {
         const allValues = data.datasets.flatMap(d => d.data);
@@ -249,6 +250,9 @@ export function createChartWidget(config: ChartConfig): WidgetPayload {
         const totalH = document.body.scrollHeight;
         window.parent.postMessage({ type: 'piechat-widget-resize', height: totalH }, '*');
       }, 100);
+      } // end render
+      // Defer until iframe is laid out so offsetWidth is correct
+      window.addEventListener('load', function() { requestAnimationFrame(render); });
     })();
   `;
 

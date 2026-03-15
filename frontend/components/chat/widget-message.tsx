@@ -184,7 +184,14 @@ export default function WidgetMessage({ widget, isMe, messageId, onAction }: Wid
 
   return (
     <>
-      <div className="widget-message space-y-1" style={{ width: inlineWidth }}>
+      {/* Outer wrapper: max-width controls how narrow widget can be */}
+      <div
+        className="widget-message space-y-1"
+        style={{
+          width: '100%',
+          maxWidth: inlineWidth === '100%' ? undefined : inlineWidth,
+        }}
+      >
         {/* Header Bar */}
         <div className={cn(
           "flex items-center justify-between rounded-t-xl px-3 py-1.5",
@@ -217,14 +224,9 @@ export default function WidgetMessage({ widget, isMe, messageId, onAction }: Wid
           </button>
         </div>
 
-        {/* Iframe Container */}
+        {/* Iframe Container — transparent so it blends with the bubble */}
         <div
-          className={cn(
-            "relative overflow-hidden rounded-b-xl transition-all duration-300",
-            isMe
-              ? "bg-white dark:bg-zinc-900/50 ring-1 ring-sky-200/50 dark:ring-sky-800/30"
-              : "bg-white dark:bg-zinc-800/50 ring-1 ring-zinc-200/50 dark:ring-zinc-700/30"
-          )}
+          className="relative overflow-hidden rounded-b-xl transition-all duration-300"
           style={{ height: inlineHeight }}
         >
           {/* Loading shimmer */}
@@ -247,7 +249,7 @@ export default function WidgetMessage({ widget, isMe, messageId, onAction }: Wid
               "h-full w-full border-0 transition-opacity duration-300",
               loaded ? "opacity-100" : "opacity-0"
             )}
-            style={{ colorScheme: 'auto' }}
+            style={{ colorScheme: 'auto', background: 'transparent' }}
           />
         </div>
 
