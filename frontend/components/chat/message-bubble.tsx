@@ -953,7 +953,7 @@ export function MessageBubble({
               ? "max-w-[85%] lg:max-w-[75%] p-0"
               : msg.widget
                 ? cn(
-                    "max-w-[95%] lg:max-w-[85%] text-[15px] lg:text-sm shadow-sm",
+                    "text-[15px] lg:text-sm shadow-sm",
                     "px-0 py-0",
                     isMe
                       ? "bg-sky-100 text-zinc-900 dark:bg-sky-900/30 dark:text-zinc-100 rounded-tr-sm border border-sky-200 dark:border-sky-800/40"
@@ -969,6 +969,16 @@ export function MessageBubble({
           msg.status === 'sending' && "opacity-70",
           msg.status === 'failed' && "border-rose-300 bg-rose-50 dark:border-rose-900/50 dark:bg-rose-900/20"
         )}
+        style={msg.widget ? (() => {
+          // Apply widget width directly on the bubble so the whole card respects it
+          const raw = msg.widget.width;
+          if (!raw) return { maxWidth: 'min(95%, 680px)' };
+          const val = typeof raw === 'number' ? `${raw}px` : raw;
+          // If specified as px value, set exact width; if percent, treat as maxWidth of parent
+          return typeof raw === 'number'
+            ? { width: val, maxWidth: '95%' }          // 500 → width:500px but capped at 95% viewport
+            : { maxWidth: `min(${val}, 95%)` };       // "80%" → maxWidth:min(80%,95%)
+        })() : undefined}
       >
         {/* Reaction Bar on Hover — hidden when menu is open */}
         {!msg.id.startsWith('temp-') && activeMenuId !== msg.id && (

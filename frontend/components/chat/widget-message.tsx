@@ -184,14 +184,8 @@ export default function WidgetMessage({ widget, isMe, messageId, onAction }: Wid
 
   return (
     <>
-      {/* Outer wrapper: max-width controls how narrow widget can be */}
-      <div
-        className="widget-message space-y-1"
-        style={{
-          width: '100%',
-          maxWidth: inlineWidth === '100%' ? undefined : inlineWidth,
-        }}
-      >
+      {/* Widget fills the bubble — width is controlled by the parent bubble div */}
+      <div className="widget-message w-full space-y-1">
         {/* Header Bar */}
         <div className={cn(
           "flex items-center justify-between rounded-t-xl px-3 py-1.5",
