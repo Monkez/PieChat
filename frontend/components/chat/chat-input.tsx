@@ -174,6 +174,10 @@ export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoic
         }
       }
 
+      // Carry over width/height from user input — SDK builders don't propagate these
+      if (raw.width != null)  payload.width  = raw.width;
+      if (raw.height != null) payload.height = raw.height;
+
       return { valid: true, payload, title: payload.title || raw.type || 'Widget' };
     } catch {
       return { valid: false };
