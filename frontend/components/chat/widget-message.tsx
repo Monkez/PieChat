@@ -3,7 +3,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { buildWidgetSrcdoc, type WidgetPayload } from '@/lib/widget-sdk';
-import { Maximize2, Minimize2, AlertTriangle } from 'lucide-react';
+import { Maximize2, Minimize2, AlertTriangle, X, Expand } from 'lucide-react';
+import { createPortal } from 'react-dom';
 
 interface WidgetMessageProps {
   widget: WidgetPayload;
@@ -11,6 +12,8 @@ interface WidgetMessageProps {
   messageId: string;
   onAction?: (messageId: string, action: string, data: unknown) => void;
 }
+
+type ViewMode = 'collapsed' | 'expanded' | 'fullscreen';
 
 const TYPE_ICONS: Record<string, string> = {
   chart: '📊',
@@ -32,26 +35,29 @@ const TYPE_LABELS: Record<string, string> = {
 
 export default function WidgetMessage({ widget, isMe, messageId, onAction }: WidgetMessageProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const fullscreenIframeRef = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState(widget.height || 200);
-  const [expanded, setExpanded] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('collapsed');
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
 
   // Listen for postMessage from the iframe
   const handleMessage = useCallback(
     (event: MessageEvent) => {
-      // Only accept messages from our iframe
-      if (iframeRef.current && event.source === iframeRef.current.contentWindow) {
+      const isFromInline = iframeRef.current && event.source === iframeRef.current.contentWindow;
+      const isFromFullscreen = fullscreenIframeRef.current && event.source === fullscreenIframeRef.current.contentWindow;
+      if (isFromInline || isFromFullscreen) {
         const msg = event.data;
         if (msg?.type === 'piechat-widget-resize' && typeof msg.height === 'number') {
-          setHeight(Math.min(expanded ? 800 : 500, Math.max(40, msg.height)));
+          const maxH = viewMode === 'fullscreen' ? 2000 : viewMode === 'expanded' ? 800 : 500;
+          setHeight(Math.min(maxH, Math.max(40, msg.height)));
         }
         if (msg?.type === 'piechat-widget-action' && onAction) {
           onAction(messageId, msg.action, msg.data);
         }
       }
     },
-    [messageId, onAction, expanded]
+    [messageId, onAction, viewMode]
   );
 
   useEffect(() => {
@@ -59,7 +65,17 @@ export default function WidgetMessage({ widget, isMe, messageId, onAction }: Wid
     return () => window.removeEventListener('message', handleMessage);
   }, [handleMessage]);
 
-  // Build the srcdoc — memoize to avoid re-building on every render
+  // Close fullscreen on Escape
+  useEffect(() => {
+    if (viewMode !== 'fullscreen') return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setViewMode('expanded');
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [viewMode]);
+
+  // Build the srcdoc
   const { srcdoc, buildError } = React.useMemo(() => {
     try {
       return { srcdoc: buildWidgetSrcdoc(widget), buildError: null };
@@ -70,7 +86,7 @@ export default function WidgetMessage({ widget, isMe, messageId, onAction }: Wid
 
   // Payload size check
   const payloadSize = srcdoc.length;
-  const isOversized = payloadSize > 128 * 1024; // generous limit for srcdoc
+  const isOversized = payloadSize > 128 * 1024;
 
   if (isOversized) {
     return (
@@ -101,86 +117,192 @@ export default function WidgetMessage({ widget, isMe, messageId, onAction }: Wid
     );
   }
 
-  return (
-    <div className="widget-message space-y-1">
-      {/* Header Bar */}
-      <div className={cn(
-        "flex items-center justify-between rounded-t-xl px-3 py-1.5",
-        isMe
-          ? "bg-sky-100/80 dark:bg-sky-900/30"
-          : "bg-zinc-100/80 dark:bg-zinc-700/40"
-      )}>
-        <div className="flex items-center gap-1.5">
-          <span className="text-sm">{TYPE_ICONS[widget.type] || '🧩'}</span>
-          <span className={cn(
-            "text-[11px] font-bold uppercase tracking-wide",
-            isMe ? "text-sky-600 dark:text-sky-400" : "text-zinc-500 dark:text-zinc-400"
-          )}>
-            {widget.title || TYPE_LABELS[widget.type] || 'Widget'}
-          </span>
-        </div>
-        <button
-          onClick={() => setExpanded(e => !e)}
-          className={cn(
-            "flex h-5 w-5 items-center justify-center rounded transition-all hover:scale-110 active:scale-95",
-            isMe
-              ? "text-sky-500/60 hover:text-sky-600 dark:text-sky-400/60"
-              : "text-zinc-400 hover:text-zinc-600 dark:text-zinc-500"
-          )}
-          title={expanded ? 'Collapse' : 'Expand'}
-        >
-          {expanded ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
-        </button>
-      </div>
+  // --- Size calculations based on view mode ---
+  const getInlineStyles = (): React.CSSProperties => {
+    switch (viewMode) {
+      case 'collapsed':
+        return {
+          height: Math.min(300, height),
+          maxWidth: '100%',
+          minWidth: 240,
+        };
+      case 'expanded':
+        return {
+          height: Math.min(600, Math.max(height, 300)),
+          maxWidth: '100%',
+          minWidth: 300,
+        };
+      default:
+        return {};
+    }
+  };
 
-      {/* Iframe Container */}
+  const cycleViewMode = () => {
+    if (viewMode === 'collapsed') setViewMode('expanded');
+    else if (viewMode === 'expanded') setViewMode('collapsed');
+  };
+
+  const openFullscreen = () => setViewMode('fullscreen');
+  const closeFullscreen = () => setViewMode('expanded');
+
+  // --- Fullscreen Modal Portal ---
+  const fullscreenModal = viewMode === 'fullscreen' ? createPortal(
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      onClick={(e) => { if (e.target === e.currentTarget) closeFullscreen(); }}
+    >
+      {/* Modal container */}
       <div
-        className={cn(
-          "relative overflow-hidden rounded-b-xl transition-all duration-300",
-          isMe
-            ? "bg-white dark:bg-zinc-900/50 ring-1 ring-sky-200/50 dark:ring-sky-800/30"
-            : "bg-white dark:bg-zinc-800/50 ring-1 ring-zinc-200/50 dark:ring-zinc-700/30"
-        )}
+        className="relative flex flex-col rounded-2xl bg-white shadow-2xl dark:bg-zinc-900 overflow-hidden"
         style={{
-          height: expanded ? Math.min(800, height) : Math.min(400, height),
-          minWidth: expanded ? 360 : 240,
-          maxWidth: expanded ? 600 : 380,
+          width: 'min(95vw, 1200px)',
+          height: 'min(90vh, 900px)',
         }}
       >
-        {/* Loading shimmer */}
-        {!loaded && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center">
-            <div className="flex flex-col items-center gap-2">
-              <div className="h-6 w-6 animate-spin rounded-full border-2 border-sky-300 border-t-transparent" />
-              <span className="text-[10px] text-zinc-400">Loading widget...</span>
+        {/* Fullscreen header */}
+        <div className={cn(
+          "flex items-center justify-between px-4 py-2.5 border-b shrink-0",
+          "bg-gradient-to-r from-sky-50 to-indigo-50 border-sky-100",
+          "dark:from-sky-950/50 dark:to-indigo-950/50 dark:border-sky-900/40"
+        )}>
+          <div className="flex items-center gap-2">
+            <span className="text-base">{TYPE_ICONS[widget.type] || '🧩'}</span>
+            <span className="text-sm font-bold text-sky-700 dark:text-sky-300">
+              {widget.title || TYPE_LABELS[widget.type] || 'Widget'}
+            </span>
+            {widget.interactive && (
+              <span className="flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-bold uppercase text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400">
+                <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Interactive
+              </span>
+            )}
+          </div>
+          <button
+            onClick={closeFullscreen}
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-400 transition-all hover:bg-rose-100 hover:text-rose-500 active:scale-90 dark:hover:bg-rose-900/30"
+            title="Close fullscreen (Esc)"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Fullscreen iframe - fills the rest */}
+        <div className="relative flex-1 overflow-hidden">
+          <iframe
+            ref={fullscreenIframeRef}
+            srcDoc={srcdoc}
+            sandbox="allow-scripts"
+            title={widget.title || 'Widget (fullscreen)'}
+            className="h-full w-full border-0"
+            style={{ colorScheme: 'auto' }}
+          />
+        </div>
+      </div>
+    </div>,
+    document.body
+  ) : null;
+
+  return (
+    <>
+      <div className="widget-message space-y-1" style={{ maxWidth: viewMode === 'expanded' ? '100%' : undefined }}>
+        {/* Header Bar */}
+        <div className={cn(
+          "flex items-center justify-between rounded-t-xl px-3 py-1.5",
+          isMe
+            ? "bg-sky-100/80 dark:bg-sky-900/30"
+            : "bg-zinc-100/80 dark:bg-zinc-700/40"
+        )}>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="text-sm shrink-0">{TYPE_ICONS[widget.type] || '🧩'}</span>
+            <span className={cn(
+              "text-[11px] font-bold uppercase tracking-wide truncate",
+              isMe ? "text-sky-600 dark:text-sky-400" : "text-zinc-500 dark:text-zinc-400"
+            )}>
+              {widget.title || TYPE_LABELS[widget.type] || 'Widget'}
+            </span>
+          </div>
+          <div className="flex items-center gap-0.5 shrink-0">
+            {/* Expand/Collapse toggle */}
+            <button
+              onClick={cycleViewMode}
+              className={cn(
+                "flex h-5 w-5 items-center justify-center rounded transition-all hover:scale-110 active:scale-95",
+                isMe
+                  ? "text-sky-500/60 hover:text-sky-600 dark:text-sky-400/60"
+                  : "text-zinc-400 hover:text-zinc-600 dark:text-zinc-500"
+              )}
+              title={viewMode === 'expanded' ? 'Collapse' : 'Expand'}
+            >
+              {viewMode === 'expanded'
+                ? <Minimize2 className="h-3 w-3" />
+                : <Maximize2 className="h-3 w-3" />
+              }
+            </button>
+
+            {/* Fullscreen button */}
+            <button
+              onClick={openFullscreen}
+              className={cn(
+                "flex h-5 w-5 items-center justify-center rounded transition-all hover:scale-110 active:scale-95",
+                isMe
+                  ? "text-sky-500/60 hover:text-sky-600 dark:text-sky-400/60"
+                  : "text-zinc-400 hover:text-zinc-600 dark:text-zinc-500"
+              )}
+              title="Open fullscreen"
+            >
+              <Expand className="h-3 w-3" />
+            </button>
+          </div>
+        </div>
+
+        {/* Iframe Container (inline) */}
+        <div
+          className={cn(
+            "relative overflow-hidden rounded-b-xl transition-all duration-300",
+            isMe
+              ? "bg-white dark:bg-zinc-900/50 ring-1 ring-sky-200/50 dark:ring-sky-800/30"
+              : "bg-white dark:bg-zinc-800/50 ring-1 ring-zinc-200/50 dark:ring-zinc-700/30"
+          )}
+          style={getInlineStyles()}
+        >
+          {/* Loading shimmer */}
+          {!loaded && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center">
+              <div className="flex flex-col items-center gap-2">
+                <div className="h-6 w-6 animate-spin rounded-full border-2 border-sky-300 border-t-transparent" />
+                <span className="text-[10px] text-zinc-400">Loading widget...</span>
+              </div>
             </div>
+          )}
+
+          <iframe
+            ref={iframeRef}
+            srcDoc={srcdoc}
+            sandbox="allow-scripts"
+            title={widget.title || 'Widget'}
+            onLoad={() => setLoaded(true)}
+            className={cn(
+              "h-full w-full border-0 transition-opacity duration-300",
+              loaded ? "opacity-100" : "opacity-0"
+            )}
+            style={{ colorScheme: 'auto' }}
+          />
+        </div>
+
+        {/* Interactive badge */}
+        {widget.interactive && (
+          <div className={cn(
+            "flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wider",
+            isMe ? "text-sky-400/50" : "text-zinc-400/50"
+          )}>
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            Interactive
           </div>
         )}
-
-        <iframe
-          ref={iframeRef}
-          srcDoc={srcdoc}
-          sandbox="allow-scripts"
-          title={widget.title || 'Widget'}
-          onLoad={() => setLoaded(true)}
-          className={cn(
-            "h-full w-full border-0 transition-opacity duration-300",
-            loaded ? "opacity-100" : "opacity-0"
-          )}
-          style={{ colorScheme: 'auto' }}
-        />
       </div>
 
-      {/* Interactive badge */}
-      {widget.interactive && (
-        <div className={cn(
-          "flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wider",
-          isMe ? "text-sky-400/50" : "text-zinc-400/50"
-        )}>
-          <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-          Interactive
-        </div>
-      )}
-    </div>
+      {/* Fullscreen modal via portal */}
+      {fullscreenModal}
+    </>
   );
 }

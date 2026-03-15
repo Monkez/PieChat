@@ -877,6 +877,14 @@ export function MessageBubble({
             ? "max-w-[140px] lg:max-w-[120px] p-1"
             : (isContactMsg || hasContactCards)
               ? "max-w-[85%] lg:max-w-[75%] p-0"
+              : msg.widget
+                ? cn(
+                    "max-w-[95%] lg:max-w-[85%] text-[15px] lg:text-sm shadow-sm",
+                    "px-0 py-0",
+                    isMe
+                      ? "bg-sky-100 text-zinc-900 dark:bg-sky-900/30 dark:text-zinc-100 rounded-tr-sm border border-sky-200 dark:border-sky-800/40"
+                      : "bg-white text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100 rounded-tl-sm border border-zinc-200 dark:border-zinc-700",
+                  )
               : cn(
                   "max-w-[85%] lg:max-w-[75%] text-[15px] lg:text-sm shadow-sm",
                   (isFile || isFolder) ? "px-2 py-1.5 lg:px-3 lg:py-2" : "px-3 py-1.5 lg:px-4 lg:py-2.5",
