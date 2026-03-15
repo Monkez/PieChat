@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Paperclip, Smile, Mic, Square, FolderOpen, File, X, Loader2, Contact, BarChart3, AlarmClock, Reply, Pencil, Clock, AtSign } from 'lucide-react';
+import { Send, Paperclip, Smile, Mic, Square, FolderOpen, File, X, Loader2, Contact, BarChart3, AlarmClock, Reply, Pencil, Clock, AtSign, Code2, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { StickerPicker } from './sticker-picker';
 
@@ -36,9 +36,10 @@ interface ChatInputProps {
   disabled?: boolean;
   onScheduleMessage?: (content: string, sendAt: number) => void;
   members?: MentionMember[];
+  onSendWidget?: (widgetPayload: object) => void;
 }
 
-export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoice, onSendContact, onSendSticker, onOpenPollDialog, onOpenReminderDialog, onTyping, replyEdit, onCancelReplyEdit, onEditMessage, onReplyMessage, placeholder, disabled, onScheduleMessage, members }: ChatInputProps) {
+export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoice, onSendContact, onSendSticker, onOpenPollDialog, onOpenReminderDialog, onTyping, replyEdit, onCancelReplyEdit, onEditMessage, onReplyMessage, placeholder, disabled, onScheduleMessage, members, onSendWidget }: ChatInputProps) {
   const [message, setMessage] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -47,6 +48,10 @@ export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoic
   const [isStickerOpen, setIsStickerOpen] = useState(false);
   const [isScheduleOpen, setIsScheduleOpen] = useState(false);
   const attachMenuRef = useRef<HTMLDivElement>(null);
+
+  // Widget paste state
+  const [pendingWidget, setPendingWidget] = useState<object | null>(null);
+  const [widgetPreviewTitle, setWidgetPreviewTitle] = useState<string>('');
 
   // Mention state
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
@@ -85,11 +90,41 @@ export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoic
     }
   }, [replyEdit]);
 
+  // ─── Widget Paste Handling ────────────────────────────
+  /**
+   * WIDGET PASTE FORMAT:
+   * Paste text starting with `//widget:` followed by a JSON WidgetPayload.
+   * Example: //widget:{"type":"chart","title":"Sales",...}
+   * The system will detect this, show a preview banner, and send as a widget.
+   */
+  const WIDGET_PREFIX = '//widget:';
+
+  const tryParseWidgetPaste = (text: string): { valid: boolean; payload?: object; title?: string } => {
+    const trimmed = text.trim();
+    if (!trimmed.startsWith(WIDGET_PREFIX)) return { valid: false };
+    const jsonStr = trimmed.slice(WIDGET_PREFIX.length).trim();
+    try {
+      const parsed = JSON.parse(jsonStr);
+      if (!parsed || typeof parsed !== 'object' || !('type' in parsed)) return { valid: false };
+      return { valid: true, payload: parsed, title: (parsed as any).title || (parsed as any).type || 'Widget' };
+    } catch {
+      return { valid: false };
+    }
+  };
+
   const handleSubmit = (e?: React.FormEvent) => {
     e?.preventDefault();
     if (disabled) return;
 
-    // Handle edit mode
+    // Handle pending widget send
+    if (pendingWidget) {
+      onSendWidget?.(pendingWidget);
+      setPendingWidget(null);
+      setWidgetPreviewTitle('');
+      return;
+    }
+
+
     if (replyEdit?.mode === 'edit' && message.trim()) {
       onEditMessage?.(replyEdit.messageId, message.trim());
       setMessage('');
@@ -167,6 +202,18 @@ export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoic
     setMessage(value);
     e.target.style.height = 'auto';
     e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
+
+    // Widget paste detection on input change (covers non-paste paths too)
+    if (value.trim().startsWith(WIDGET_PREFIX)) {
+      const result = tryParseWidgetPaste(value);
+      if (result.valid && result.payload) {
+        setPendingWidget(result.payload);
+        setWidgetPreviewTitle(result.title || 'Widget');
+        setMessage(''); // clear the input
+        if (textareaRef.current) textareaRef.current.style.height = 'auto';
+        return;
+      }
+    }
 
     // Send typing indicator immediately when starting to type
     if (value.length > 0 && !isTypingRef.current) {
@@ -440,6 +487,28 @@ export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoic
           </button>
         </div>
       )}
+
+      {/* Widget Paste Preview Bar */}
+      {pendingWidget && (
+        <div className="flex items-center gap-2 rounded-t-2xl border border-b-0 border-violet-200 bg-violet-50/80 px-3 py-2 text-sm dark:border-violet-800/40 dark:bg-violet-950/30 animate-in fade-in slide-in-from-bottom-1 duration-200">
+          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-violet-200 dark:bg-violet-800/40">
+            <Code2 className="h-3 w-3 text-violet-600 dark:text-violet-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] font-bold text-violet-600 dark:text-violet-400">🧩 Widget sẵn sàng gửi</p>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate">{widgetPreviewTitle}</p>
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => { setPendingWidget(null); setWidgetPreviewTitle(''); }}
+              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+              title="Hủy widget"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        </div>
+      )}
       {/* Pending Files Preview */}
       {pendingFiles.length > 0 && (
         <div className="flex flex-wrap gap-2 px-2">
@@ -670,7 +739,19 @@ export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoic
           </div>
 
           {/* Voice / Send toggle */}
-          {message.trim() || pendingFiles.length > 0 ? (
+          {pendingWidget ? (
+            <button
+              onClick={() => handleSubmit()}
+              disabled={disabled}
+              className={cn(
+                "flex h-8 w-8 lg:h-7 lg:w-7 items-center justify-center rounded-full transition-all",
+                "bg-violet-600 text-white shadow-md hover:bg-violet-700 hover:scale-105 active:scale-95"
+              )}
+              title="Gửi widget"
+            >
+              <Zap className="h-4 w-4 lg:h-3.5 lg:w-3.5" />
+            </button>
+          ) : message.trim() || pendingFiles.length > 0 ? (
             <button
               onClick={() => handleSubmit()}
               disabled={disabled || isUploading}

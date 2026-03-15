@@ -3,7 +3,7 @@
 import { useState, useRef, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import Image from 'next/image';
-import { MoreVertical, Reply, Forward, Info, Trash2, Repeat, Download, Play, Pause, FileIcon, Copy, Pin, Pencil } from 'lucide-react';
+import { MoreVertical, Reply, Forward, Info, Trash2, Repeat, Download, Play, Pause, FileIcon, Copy, Pin, Pencil, Phone, CreditCard, KeyRound, Link2, Code2 } from 'lucide-react';
 import { Message } from '@/lib/services/matrix-service';
 import { cn } from '@/lib/utils';
 import { Avatar } from '@/components/ui/avatar';
@@ -470,6 +470,45 @@ export function MessageBubble({
     setLongPressActive(false);
   }, []);
 
+  // ─── Smart Copy Helpers ────────────────────────────────
+  const extractPhones = (text: string): string[] => {
+    const matches = text.match(/(?:\+84|0)[3-9]\d{8}\b/g) || [];
+    return [...new Set(matches)];
+  };
+
+  const extractBankAccounts = (text: string): string[] => {
+    const matches = text.match(/\b\d{9,19}\b/g) || [];
+    return [...new Set(matches.filter(n => n.length >= 9 && n.length <= 19))];
+  };
+
+  const extractOtps = (text: string): string[] => {
+    const matches = text.match(/\b\d{4,8}\b/g) || [];
+    // filter out phone-like numbers (10 digits) and only keep 4-8 digit codes
+    return [...new Set(matches.filter(n => !extractPhones(text).some(p => p.includes(n))))];
+  };
+
+  const extractUrls = (text: string): string[] => {
+    const matches = text.match(/https?:\/\/[^\s,'"<>]+/g) || [];
+    return [...new Set(matches)];
+  };
+
+  const isScript = msg.widget != null;
+  const msgText = (!msg.widget && !msg.msgtype?.startsWith('m.')) ? msg.content : '';
+  const smartPhones = useMemo(() => extractPhones(msgText), [msgText]);
+  const smartAccounts = useMemo(() => extractBankAccounts(msgText), [msgText]);
+  const smartOtps = useMemo(() => extractOtps(msgText), [msgText]);
+  const smartUrls = useMemo(() => extractUrls(msgText), [msgText]);
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard?.writeText(text).catch(() => {});
+  };
+
+  const [copyToast, setCopyToast] = useState<string | null>(null);
+  const showCopyToast = (label: string) => {
+    setCopyToast(label);
+    setTimeout(() => setCopyToast(null), 1800);
+  };
+
   const handleCopy = useCallback(() => {
     navigator.clipboard?.writeText(msg.content).catch(() => {});
     closeLongPress();
@@ -789,14 +828,47 @@ export function MessageBubble({
             </button>
 
             <button
-              onClick={handleCopy}
+              onClick={() => {
+                if (isScript) {
+                  copyToClipboard(JSON.stringify(msg.widget));
+                  showCopyToast('Script');
+                } else {
+                  copyToClipboard(msg.content);
+                  showCopyToast('Văn bản');
+                }
+                closeLongPress();
+              }}
               className="flex flex-col items-center gap-1.5 rounded-xl py-3 active:bg-zinc-100 dark:active:bg-zinc-800 transition-colors"
             >
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 dark:bg-amber-900/30">
-                <Copy className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                {isScript ? <Code2 className="h-5 w-5 text-amber-600 dark:text-amber-400" /> : <Copy className="h-5 w-5 text-amber-600 dark:text-amber-400" />}
               </div>
-              <span className="text-[11px] font-medium text-zinc-600 dark:text-zinc-400">{t(language, 'msgCopy' as any)}</span>
+              <span className="text-[11px] font-medium text-zinc-600 dark:text-zinc-400">{isScript ? 'Sao chép Script' : t(language, 'msgCopy' as any)}</span>
             </button>
+
+            {/* Smart copy options in mobile sheet */}
+            {!isScript && smartPhones.length > 0 && (
+              <button
+                onClick={() => { copyToClipboard(smartPhones[0]); showCopyToast('SĐT'); closeLongPress(); }}
+                className="flex flex-col items-center gap-1.5 rounded-xl py-3 active:bg-zinc-100 dark:active:bg-zinc-800 transition-colors"
+              >
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-green-100 dark:bg-green-900/30">
+                  <Phone className="h-5 w-5 text-green-600 dark:text-green-400" />
+                </div>
+                <span className="text-[11px] font-medium text-zinc-600 dark:text-zinc-400">Sao chép SĐT</span>
+              </button>
+            )}
+            {!isScript && smartOtps.length > 0 && (
+              <button
+                onClick={() => { copyToClipboard(smartOtps[0]); showCopyToast('OTP'); closeLongPress(); }}
+                className="flex flex-col items-center gap-1.5 rounded-xl py-3 active:bg-zinc-100 dark:active:bg-zinc-800 transition-colors"
+              >
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-100 dark:bg-orange-900/30">
+                  <KeyRound className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                </div>
+                <span className="text-[11px] font-medium text-zinc-600 dark:text-zinc-400">Sao chép OTP</span>
+              </button>
+            )}
 
             <button
               onClick={() => { onMenuAction('details', msg); closeLongPress(); }}
@@ -948,7 +1020,7 @@ export function MessageBubble({
 
             {activeMenuId === msg.id && (
               <div className={cn(
-                "absolute z-[100] w-44 overflow-hidden rounded-2xl border border-zinc-200 bg-white/95 p-1.5 shadow-2xl ring-1 ring-black/5 backdrop-blur-md dark:border-zinc-700 dark:bg-zinc-800/95 animate-in fade-in zoom-in-95 duration-200",
+                "absolute z-[100] w-52 overflow-hidden rounded-2xl border border-zinc-200 bg-white/95 p-1.5 shadow-2xl ring-1 ring-black/5 backdrop-blur-md dark:border-zinc-700 dark:bg-zinc-800/95 animate-in fade-in zoom-in-95 duration-200",
                 showAbove
                   ? "bottom-full mb-2 origin-bottom-right"
                   : "top-full mt-2 origin-top-right",
@@ -965,11 +1037,46 @@ export function MessageBubble({
                   <Info className="h-4 w-4" /> {t(language, 'msgDetails' as any) || 'Details'}
                 </button>
                 <div className="my-1.5 h-px bg-zinc-100 dark:bg-zinc-700/50" />
-                <button onClick={() => onMenuAction('delete', msg)} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-900/20 transition-all text-nowrap">
+                {/* ── Smart Copy Options ── */}
+                {isScript ? (
+                  <button onClick={() => { copyToClipboard(JSON.stringify(msg.widget)); setActiveMenuId(null); showCopyToast('Script'); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-zinc-700 hover:bg-amber-50 hover:text-amber-700 dark:text-zinc-200 dark:hover:bg-amber-900/20 transition-all text-nowrap">
+                    <Code2 className="h-4 w-4 text-amber-500" /> Sao chép mã script
+                  </button>
+                ) : (
+                  <>
+                    {msgText && (
+                      <button onClick={() => { copyToClipboard(msg.content); setActiveMenuId(null); showCopyToast('Văn bản'); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-zinc-700 hover:bg-sky-50 hover:text-sky-700 dark:text-zinc-200 dark:hover:bg-sky-900/30 dark:hover:text-sky-400 transition-all text-nowrap">
+                        <Copy className="h-4 w-4" /> Sao chép văn bản
+                      </button>
+                    )}
+                    {smartPhones.length > 0 && (
+                      <button onClick={() => { copyToClipboard(smartPhones[0]); setActiveMenuId(null); showCopyToast('SĐT'); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-zinc-700 hover:bg-green-50 hover:text-green-700 dark:text-zinc-200 dark:hover:bg-green-900/20 transition-all text-nowrap">
+                        <Phone className="h-4 w-4 text-green-500" /> Sao chép số điện thoại
+                      </button>
+                    )}
+                    {smartAccounts.length > 0 && smartPhones.length === 0 && (
+                      <button onClick={() => { copyToClipboard(smartAccounts[0]); setActiveMenuId(null); showCopyToast('Số TK'); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-zinc-700 hover:bg-violet-50 hover:text-violet-700 dark:text-zinc-200 dark:hover:bg-violet-900/20 transition-all text-nowrap">
+                        <CreditCard className="h-4 w-4 text-violet-500" /> Sao chép số tài khoản
+                      </button>
+                    )}
+                    {smartOtps.length > 0 && (
+                      <button onClick={() => { copyToClipboard(smartOtps[0]); setActiveMenuId(null); showCopyToast('OTP'); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-zinc-700 hover:bg-orange-50 hover:text-orange-700 dark:text-zinc-200 dark:hover:bg-orange-900/20 transition-all text-nowrap">
+                        <KeyRound className="h-4 w-4 text-orange-500" /> Sao chép mã OTP
+                      </button>
+                    )}
+                    {smartUrls.length > 0 && (
+                      <button onClick={() => { copyToClipboard(smartUrls[0]); setActiveMenuId(null); showCopyToast('Link'); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-zinc-700 hover:bg-sky-50 hover:text-sky-700 dark:text-zinc-200 dark:hover:bg-sky-900/30 dark:hover:text-sky-400 transition-all text-nowrap">
+                        <Link2 className="h-4 w-4 text-sky-500" /> Sao chép liên kết
+                      </button>
+                    )}
+                  </>
+                )}
+                <div className="my-1.5 h-px bg-zinc-100 dark:bg-zinc-700/50" />
+                <button onClick={() => { onMenuAction('delete', msg); setActiveMenuId(null); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-900/20 transition-all text-nowrap">
                   <Trash2 className="h-4 w-4" /> {t(language, 'msgDelete' as any) || 'Delete'}
                 </button>
                 {isMe && msg.msgtype !== 'm.image' && msg.msgtype !== 'm.video' && msg.msgtype !== 'm.file' && msg.msgtype !== 'm.audio' && (
-                  <button onClick={() => onMenuAction('edit', msg)} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-900/20 transition-all text-nowrap">
+                  <button onClick={() => { onMenuAction('edit', msg); setActiveMenuId(null); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-900/20 transition-all text-nowrap">
                     <Pencil className="h-4 w-4" /> Sửa
                   </button>
                 )}
@@ -1184,6 +1291,13 @@ export function MessageBubble({
           </button>
         )}
       </div>
+
+      {/* Copy Toast */}
+      {copyToast && (
+        <div className="absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-zinc-900/90 px-3 py-1 text-[11px] font-semibold text-white shadow-lg animate-in fade-in zoom-in-95 duration-150 pointer-events-none z-50">
+          ✓ Đã sao chép {copyToast}
+        </div>
+      )}
     </div>
     </>
   );

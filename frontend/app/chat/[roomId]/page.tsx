@@ -19,6 +19,7 @@ import { ReminderCreateDialog, type ReminderData } from '@/components/chat/remin
 import { useChatNotifications, scheduleReminderNotification, schedulePollExpiryNotification, notifyNewMessages, seedNotifiedMessageIds } from '@/lib/services/chat-notification-service';
 import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
+import type { WidgetPayload } from '@/lib/widget-sdk';
 
 export default function RoomPage() {
   const params = useParams();
@@ -641,6 +642,32 @@ export default function RoomPage() {
     const dmRoom = await createDirectChatByUserId(userId);
     if (dmRoom) {
       router.push(`/chat/${encodeURIComponent(dmRoom)}`);
+    }
+  };
+
+  // ─── Widget Handler ────────────────────────────────────
+  const handleSendWidget = async (widgetPayload: object) => {
+    if (!roomId) return;
+    const payload = widgetPayload as WidgetPayload;
+    const tempId = `temp-widget-${Date.now()}`;
+    const tempMsg: Message = {
+      id: tempId,
+      roomId,
+      senderId: currentUser?.id || 'me',
+      content: `🧩 Widget: ${payload.title || payload.type || 'Widget'}`,
+      timestamp: Date.now(),
+      status: 'sending',
+      widget: payload,
+    };
+    setMessages(prev => [...prev, tempMsg]);
+
+    try {
+      await matrixService.sendWidgetMessage(roomId, `🧩 Widget: ${payload.title || payload.type || 'Widget'}`, payload);
+      setMessages(prev => prev.map(item => item.id === tempId ? { ...item, status: 'sent' } : item));
+      await loadMessages(true);
+    } catch (err) {
+      console.error('Widget send failed:', err);
+      setMessages(prev => prev.map(item => item.id === tempId ? { ...item, status: 'failed' } : item));
     }
   };
 
@@ -1839,6 +1866,7 @@ export default function RoomPage() {
                   displayName: m.displayName || m.username,
                   username: m.username,
                 }))}
+                onSendWidget={handleSendWidget}
               />
             </div>
           </>
