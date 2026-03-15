@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { buildWidgetSrcdoc, type WidgetPayload } from '@/lib/widget-sdk';
-import { Maximize2, Minimize2, AlertTriangle, X, Expand } from 'lucide-react';
+import { Maximize2, AlertTriangle, X } from 'lucide-react';
 import { createPortal } from 'react-dom';
 
 interface WidgetMessageProps {
@@ -12,8 +12,6 @@ interface WidgetMessageProps {
   messageId: string;
   onAction?: (messageId: string, action: string, data: unknown) => void;
 }
-
-type ViewMode = 'collapsed' | 'expanded' | 'fullscreen';
 
 const TYPE_ICONS: Record<string, string> = {
   chart: '📊',
@@ -33,11 +31,18 @@ const TYPE_LABELS: Record<string, string> = {
   custom: 'Widget',
 };
 
+/** Normalize width value: number → '123px', string passthrough, undefined → '100%' */
+function normalizeSize(val: string | number | undefined, fallback: string): string {
+  if (val === undefined || val === null) return fallback;
+  if (typeof val === 'number') return `${val}px`;
+  return val; // e.g. '80%', '500px'
+}
+
 export default function WidgetMessage({ widget, isMe, messageId, onAction }: WidgetMessageProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const fullscreenIframeRef = useRef<HTMLIFrameElement>(null);
-  const [height, setHeight] = useState(widget.height || 200);
-  const [viewMode, setViewMode] = useState<ViewMode>('collapsed');
+  const [iframeHeight, setIframeHeight] = useState(widget.height || 200);
+  const [fullscreen, setFullscreen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
 
@@ -49,15 +54,14 @@ export default function WidgetMessage({ widget, isMe, messageId, onAction }: Wid
       if (isFromInline || isFromFullscreen) {
         const msg = event.data;
         if (msg?.type === 'piechat-widget-resize' && typeof msg.height === 'number') {
-          const maxH = viewMode === 'fullscreen' ? 2000 : viewMode === 'expanded' ? 800 : 500;
-          setHeight(Math.min(maxH, Math.max(40, msg.height)));
+          setIframeHeight(Math.min(800, Math.max(40, msg.height)));
         }
         if (msg?.type === 'piechat-widget-action' && onAction) {
           onAction(messageId, msg.action, msg.data);
         }
       }
     },
-    [messageId, onAction, viewMode]
+    [messageId, onAction]
   );
 
   useEffect(() => {
@@ -67,13 +71,13 @@ export default function WidgetMessage({ widget, isMe, messageId, onAction }: Wid
 
   // Close fullscreen on Escape
   useEffect(() => {
-    if (viewMode !== 'fullscreen') return;
+    if (!fullscreen) return;
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setViewMode('expanded');
+      if (e.key === 'Escape') setFullscreen(false);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [viewMode]);
+  }, [fullscreen]);
 
   // Build the srcdoc
   const { srcdoc, buildError } = React.useMemo(() => {
@@ -117,39 +121,15 @@ export default function WidgetMessage({ widget, isMe, messageId, onAction }: Wid
     );
   }
 
-  // --- Size calculations based on view mode ---
-  const getInlineStyles = (): React.CSSProperties => {
-    switch (viewMode) {
-      case 'collapsed':
-        return {
-          height: Math.min(300, height),
-          maxWidth: '100%',
-          minWidth: 240,
-        };
-      case 'expanded':
-        return {
-          height: Math.min(600, Math.max(height, 300)),
-          maxWidth: '100%',
-          minWidth: 300,
-        };
-      default:
-        return {};
-    }
-  };
-
-  const cycleViewMode = () => {
-    if (viewMode === 'collapsed') setViewMode('expanded');
-    else if (viewMode === 'expanded') setViewMode('collapsed');
-  };
-
-  const openFullscreen = () => setViewMode('fullscreen');
-  const closeFullscreen = () => setViewMode('expanded');
+  // --- Inline size from widget payload ---
+  const inlineWidth = normalizeSize(widget.width, '100%');
+  const inlineHeight = iframeHeight;
 
   // --- Fullscreen Modal Portal ---
-  const fullscreenModal = viewMode === 'fullscreen' ? createPortal(
+  const fullscreenModal = fullscreen ? createPortal(
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm"
-      onClick={(e) => { if (e.target === e.currentTarget) closeFullscreen(); }}
+      onClick={(e) => { if (e.target === e.currentTarget) setFullscreen(false); }}
     >
       {/* Modal container */}
       <div
@@ -178,7 +158,7 @@ export default function WidgetMessage({ widget, isMe, messageId, onAction }: Wid
             )}
           </div>
           <button
-            onClick={closeFullscreen}
+            onClick={() => setFullscreen(false)}
             className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-400 transition-all hover:bg-rose-100 hover:text-rose-500 active:scale-90 dark:hover:bg-rose-900/30"
             title="Close fullscreen (Esc)"
           >
@@ -204,7 +184,7 @@ export default function WidgetMessage({ widget, isMe, messageId, onAction }: Wid
 
   return (
     <>
-      <div className="widget-message space-y-1" style={{ maxWidth: viewMode === 'expanded' ? '100%' : undefined }}>
+      <div className="widget-message space-y-1" style={{ width: inlineWidth }}>
         {/* Header Bar */}
         <div className={cn(
           "flex items-center justify-between rounded-t-xl px-3 py-1.5",
@@ -221,41 +201,23 @@ export default function WidgetMessage({ widget, isMe, messageId, onAction }: Wid
               {widget.title || TYPE_LABELS[widget.type] || 'Widget'}
             </span>
           </div>
-          <div className="flex items-center gap-0.5 shrink-0">
-            {/* Expand/Collapse toggle */}
-            <button
-              onClick={cycleViewMode}
-              className={cn(
-                "flex h-5 w-5 items-center justify-center rounded transition-all hover:scale-110 active:scale-95",
-                isMe
-                  ? "text-sky-500/60 hover:text-sky-600 dark:text-sky-400/60"
-                  : "text-zinc-400 hover:text-zinc-600 dark:text-zinc-500"
-              )}
-              title={viewMode === 'expanded' ? 'Collapse' : 'Expand'}
-            >
-              {viewMode === 'expanded'
-                ? <Minimize2 className="h-3 w-3" />
-                : <Maximize2 className="h-3 w-3" />
-              }
-            </button>
 
-            {/* Fullscreen button */}
-            <button
-              onClick={openFullscreen}
-              className={cn(
-                "flex h-5 w-5 items-center justify-center rounded transition-all hover:scale-110 active:scale-95",
-                isMe
-                  ? "text-sky-500/60 hover:text-sky-600 dark:text-sky-400/60"
-                  : "text-zinc-400 hover:text-zinc-600 dark:text-zinc-500"
-              )}
-              title="Open fullscreen"
-            >
-              <Expand className="h-3 w-3" />
-            </button>
-          </div>
+          {/* Only fullscreen button */}
+          <button
+            onClick={() => setFullscreen(true)}
+            className={cn(
+              "flex h-5 w-5 items-center justify-center rounded transition-all hover:scale-110 active:scale-95",
+              isMe
+                ? "text-sky-500/60 hover:text-sky-600 dark:text-sky-400/60"
+                : "text-zinc-400 hover:text-zinc-600 dark:text-zinc-500"
+            )}
+            title="Full screen"
+          >
+            <Maximize2 className="h-3 w-3" />
+          </button>
         </div>
 
-        {/* Iframe Container (inline) */}
+        {/* Iframe Container */}
         <div
           className={cn(
             "relative overflow-hidden rounded-b-xl transition-all duration-300",
@@ -263,7 +225,7 @@ export default function WidgetMessage({ widget, isMe, messageId, onAction }: Wid
               ? "bg-white dark:bg-zinc-900/50 ring-1 ring-sky-200/50 dark:ring-sky-800/30"
               : "bg-white dark:bg-zinc-800/50 ring-1 ring-zinc-200/50 dark:ring-zinc-700/30"
           )}
-          style={getInlineStyles()}
+          style={{ height: inlineHeight }}
         >
           {/* Loading shimmer */}
           {!loaded && (

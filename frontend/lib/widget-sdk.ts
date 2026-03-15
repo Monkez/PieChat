@@ -18,6 +18,9 @@ export interface WidgetPayload {
   css?: string;
   script?: string;
   data?: Record<string, unknown>;
+  /** Inline width — number (px) or string ('80%', '600px'). Default: '100%' */
+  width?: string | number;
+  /** Inline height — number (px). Default: 200 */
   height?: number;
   interactive?: boolean;
   version?: string;
