@@ -322,6 +322,7 @@ function getMessageBody(msg: Message): string {
   if (msg.msgtype === 'io.piechat.reminder') return '⏰ Nhắc hẹn mới';
   if (msg.msgtype === 'io.piechat.contact') return '📇 Danh thiếp';
   const text = msg.content || '';
+  if (!text.trim()) return 'Tin nhắn mới';
   return text.length > 100 ? text.slice(0, 97) + '...' : text;
 }
 

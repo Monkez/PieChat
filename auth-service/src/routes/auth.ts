@@ -111,7 +111,7 @@ async function sendOtpSms(phone: string, otp: string): Promise<void> {
         });
         if (!response.ok) throw new Error('SMS provider error');
     }
-    console.log(`[OTP] ${phone}: ${otp}`);
+    console.log(`[OTP] ${phone}: ***`);
 }
 
 // ─── POST /auth/request-otp ─────────────────────────────
@@ -565,7 +565,7 @@ router.post('/forgot-password', authRateLimit, async (req: Request, res: Respons
         return;
     }
 
-    console.log(`[ForgotPassword] OTP sent to ${phone}: ${code}`);
+    console.log(`[ForgotPassword] OTP sent to ${phone}: ***`);
     res.json({ success: true, message: 'Mã OTP đã được gửi đến số điện thoại của bạn' });
 });
 

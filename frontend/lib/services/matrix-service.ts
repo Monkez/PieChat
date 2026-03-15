@@ -974,7 +974,7 @@ class MatrixService {
           }
         }
 
-        // Parse ephemeral typing events
+        // Parse ephemeral typing events + read receipts
         if (joinedRooms[roomId]?.ephemeral?.events) {
           for (const ev of joinedRooms[roomId].ephemeral!.events!) {
             if (ev.type === 'm.typing') {
@@ -982,6 +982,8 @@ class MatrixService {
               this.setTypingUsers(roomId, userIds);
             }
           }
+          // Parse read receipts
+          this.parseReadReceipts(roomId, joinedRooms[roomId].ephemeral!.events! as any);
         }
 
         return {
@@ -2530,6 +2532,109 @@ class MatrixService {
     return mxcUrl.startsWith('mxc://')
       ? `${this.baseUrl}/_matrix/media/v3/download/${mxcUrl.slice(6)}`
       : mxcUrl;
+  }
+
+  // ─── Search messages in a specific room ────────────────
+  async searchMessagesInRoom(roomId: string, query: string, limit = 50): Promise<Message[]> {
+    if (!query.trim()) return [];
+    try {
+      // Use /messages endpoint with filter to search backwards
+      const response = await this.request<{
+        chunk: Array<{
+          event_id: string;
+          sender: string;
+          type: string;
+          content: Record<string, unknown>;
+          origin_server_ts: number;
+        }>;
+        end?: string;
+      }>(
+        `/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/messages?dir=b&limit=${limit}&filter=${encodeURIComponent(JSON.stringify({ types: ['m.room.message'] }))}`,
+      );
+
+      const lowerQuery = query.toLowerCase();
+      return (response.chunk || [])
+        .filter((event) => {
+          const body = String(event.content?.body || '').toLowerCase();
+          return body.includes(lowerQuery);
+        })
+        .map((event) => ({
+          id: event.event_id,
+          roomId,
+          senderId: event.sender,
+          content: String(event.content?.body || ''),
+          timestamp: event.origin_server_ts,
+          status: 'read' as const,
+          msgtype: String(event.content?.msgtype || 'm.text'),
+        }));
+    } catch {
+      return [];
+    }
+  }
+
+  // ─── Read receipts (who has read) ────────────────────
+  private _readReceipts: Record<string, Record<string, number>> = {};
+
+  parseReadReceipts(roomId: string, events: Array<{ type: string; content: Record<string, unknown> }>) {
+    for (const ev of events) {
+      if (ev.type !== 'm.receipt') continue;
+      const content = ev.content || {};
+      for (const [eventId, receiptData] of Object.entries(content)) {
+        const readData = (receiptData as any)?.['m.read'];
+        if (!readData) continue;
+        for (const [userId, info] of Object.entries(readData)) {
+          if (!this._readReceipts[roomId]) this._readReceipts[roomId] = {};
+          const ts = (info as any)?.ts || 0;
+          if (!this._readReceipts[roomId][userId] || ts > this._readReceipts[roomId][userId]) {
+            this._readReceipts[roomId][userId] = ts;
+          }
+        }
+      }
+    }
+  }
+
+  getReadReceiptUsers(roomId: string, eventId: string, eventTs: number): string[] {
+    const roomReceipts = this._readReceipts[roomId] || {};
+    const myId = this.getCurrentUserId();
+    return Object.entries(roomReceipts)
+      .filter(([userId, ts]) => userId !== myId && ts >= eventTs)
+      .map(([userId]) => userId);
+  }
+
+  hasBeenRead(roomId: string, eventTs: number): boolean {
+    return this.getReadReceiptUsers(roomId, '', eventTs).length > 0;
+  }
+
+  // ─── Broadcast message to all groups in a channel ────
+  async broadcastToChannel(channelId: string, message: string, groupRoomIds: string[]): Promise<number> {
+    let sent = 0;
+    for (const groupId of groupRoomIds) {
+      try {
+        await this.sendMessage(groupId, message);
+        sent++;
+      } catch {
+        // Continue sending to other groups
+      }
+    }
+    return sent;
+  }
+
+  // ─── Last active time formatting ─────────────────────
+  async getLastActiveTime(userId: string): Promise<string> {
+    try {
+      const presence = await this.getPresence(userId);
+      if (presence.currently_active || presence.presence === 'online') return 'Online';
+      if (presence.last_active_ago) {
+        const ms = presence.last_active_ago;
+        if (ms < 60_000) return 'Vừa mới truy cập';
+        if (ms < 3600_000) return `${Math.floor(ms / 60_000)} phút trước`;
+        if (ms < 86400_000) return `${Math.floor(ms / 3600_000)} giờ trước`;
+        return `${Math.floor(ms / 86400_000)} ngày trước`;
+      }
+      return '';
+    } catch {
+      return '';
+    }
   }
 
   // ─── Inline Buttons (for Bot/AI assistant) ───────────

@@ -67,7 +67,12 @@ export default function RoomPage() {
   const [replyEdit, setReplyEdit] = useState<ReplyEditState | null>(null);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const [remotePresence, setRemotePresence] = useState<string>('offline');
+  const [lastSeenText, setLastSeenText] = useState<string>('');
   const [isGalleryOpen, setIsGalleryOpen] = useState(false);
+  const [isMemberListOpen, setIsMemberListOpen] = useState(false);
+  const [isBroadcastOpen, setIsBroadcastOpen] = useState(false);
+  const [broadcastText, setBroadcastText] = useState('');
+  const [broadcastSending, setBroadcastSending] = useState(false);
   const [forwardingMessage, setForwardingMessage] = useState<Message | null>(null);
   const [forwardSearch, setForwardSearch] = useState('');
   const [forwardTargetChannel, setForwardTargetChannel] = useState<string | null>(null);
@@ -860,15 +865,26 @@ export default function RoomPage() {
     };
   }, []);
 
-  // Poll remote presence for DM rooms
+  // Poll remote presence for DM rooms — with last seen time
   useEffect(() => {
     if (room?.type !== 'dm') return;
     const remoteUser = room?.members.find(m => m.id !== currentUser?.id);
     if (!remoteUser) return;
-    const fetchPresence = () => {
-      matrixService.getPresence(remoteUser.id).then(p => {
-        setRemotePresence(p.currently_active ? 'online' : p.presence);
-      });
+    const fetchPresence = async () => {
+      try {
+        const p = await matrixService.getPresence(remoteUser.id);
+        const isOnline = p.currently_active || p.presence === 'online';
+        setRemotePresence(isOnline ? 'online' : p.presence);
+        if (!isOnline) {
+          const text = await matrixService.getLastActiveTime(remoteUser.id);
+          setLastSeenText(text || 'Ngoại tuyến');
+        } else {
+          setLastSeenText('');
+        }
+      } catch {
+        setRemotePresence('offline');
+        setLastSeenText('Ngoại tuyến');
+      }
     };
     fetchPresence();
     const interval = setInterval(fetchPresence, 15000);
@@ -1001,9 +1017,9 @@ export default function RoomPage() {
                   ? (<>
                       <span className={cn(
                         "inline-block h-2 w-2 rounded-full",
-                        remotePresence === 'online' ? "bg-emerald-500" : "bg-zinc-300 dark:bg-zinc-600"
+                        remotePresence === 'online' ? "bg-emerald-500 animate-pulse" : "bg-zinc-300 dark:bg-zinc-600"
                       )} />
-                      {remotePresence === 'online' ? 'Đang hoạt động' : 'Ngoại tuyến'}
+                      {remotePresence === 'online' ? 'Đang hoạt động' : (lastSeenText || 'Ngoại tuyến')}
                     </>)
                   : room?.type === 'group' && parentChannel
                     ? `${parentChannel.name} • ${room.members.length} ${t(language, 'chatRoleMember').toLowerCase()}`
@@ -1048,6 +1064,29 @@ export default function RoomPage() {
                 className="hidden sm:inline-flex rounded-full p-2 text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
               >
                 <Video className="h-5 w-5" />
+              </button>
+            )}
+            {/* Member List Toggle */}
+            {!isSelfNote && room?.type !== 'dm' && (
+              <button
+                onClick={() => setIsMemberListOpen(prev => !prev)}
+                className={cn(
+                  "hidden sm:inline-flex rounded-full p-2 text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800",
+                  isMemberListOpen && "bg-sky-50 text-sky-500 dark:bg-sky-900/20 dark:text-sky-400"
+                )}
+                title="Danh sách thành viên"
+              >
+                <Users className="h-5 w-5" />
+              </button>
+            )}
+            {/* Broadcast Button for Channel Leaders */}
+            {room?.type === 'channel' && canManageChannel && (
+              <button
+                onClick={() => setIsBroadcastOpen(true)}
+                className="hidden sm:inline-flex rounded-full p-2 text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                title="Gửi thông báo đến tất cả nhóm"
+              >
+                <MessageSquare className="h-5 w-5" />
               </button>
             )}
             <div className="relative">
@@ -1650,6 +1689,13 @@ export default function RoomPage() {
                 const isMe = msg.senderId === currentUser?.id || msg.senderId === 'me';
                 const member = room?.members.find((m) => m.id === msg.senderId);
                 const senderName = member?.displayName || member?.username || msg.senderId;
+                // Determine sender role for badge display
+                const _sCR = room?.channelRoles[msg.senderId];
+                const _sGR = room?.groupRoles[msg.senderId];
+                const senderRole: 'leader' | 'deputy' | 'member' | null =
+                  (_sCR === 'leader' || _sGR === 'leader') ? 'leader'
+                  : (_sCR === 'deputy' || _sGR === 'deputy') ? 'deputy'
+                  : (room?.type === 'dm') ? null : 'member';
                 // Group messages if sender is same as previous and time diff is small (< 5 mins)
                 const prevMsg = displayedMessages[idx - 1];
                 const isFirst = !prevMsg || prevMsg.senderId !== msg.senderId || (msg.timestamp - prevMsg.timestamp > 5 * 60 * 1000);
@@ -1707,6 +1753,7 @@ export default function RoomPage() {
                         matrixService.sendButtonClick(roomId, msgId, btnId, label).catch(console.error);
                       }}
                       onAvatarClick={(userId) => setProfileUserId(userId)}
+                      senderRole={senderRole}
                     />
                   </div>
                 );
@@ -2161,6 +2208,131 @@ export default function RoomPage() {
           </div>
         );
       })()}
+      {/* Member List Side Panel */}
+      {isMemberListOpen && room && room.type !== 'dm' && (
+        <div className="fixed right-0 top-0 bottom-0 z-[150] w-72 sm:w-80 bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-800 shadow-2xl flex flex-col animate-in slide-in-from-right duration-200" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+          <div className="flex items-center justify-between px-4 py-4 border-b border-zinc-100 dark:border-zinc-800">
+            <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+              <Users className="h-4 w-4 text-sky-500" />
+              Thành viên ({room.members.length})
+            </h3>
+            <button onClick={() => setIsMemberListOpen(false)} className="rounded-full p-1 text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto px-2 py-2 space-y-0.5">
+            {room.members
+              .sort((a, b) => {
+                const roleOrder = (uid: string) => {
+                  const cr = room.channelRoles[uid];
+                  const gr = room.groupRoles[uid];
+                  if (cr === 'leader' || gr === 'leader') return 0;
+                  if (cr === 'deputy' || gr === 'deputy') return 1;
+                  return 2;
+                };
+                return roleOrder(a.id) - roleOrder(b.id);
+              })
+              .map(member => {
+                const cr = room.channelRoles[member.id];
+                const gr = room.groupRoles[member.id];
+                const roleBadge = (cr === 'leader' || gr === 'leader')
+                  ? '👑'
+                  : (cr === 'deputy' || gr === 'deputy')
+                    ? '⭐'
+                    : null;
+                const roleLabel = (cr === 'leader' || gr === 'leader')
+                  ? t(language, 'chatRoleLeader')
+                  : (cr === 'deputy' || gr === 'deputy')
+                    ? t(language, 'chatRoleDeputy')
+                    : t(language, 'chatRoleMember');
+                return (
+                  <button
+                    key={member.id}
+                    onClick={() => { setIsMemberListOpen(false); setProfileUserId(member.id); }}
+                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors group"
+                  >
+                    <div className="relative shrink-0">
+                      <div className="h-9 w-9 rounded-full bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center text-sm font-bold text-sky-700 dark:text-sky-300">
+                        {(member.displayName || member.username || '?').charAt(0).toUpperCase()}
+                      </div>
+                      {member.id === currentUser?.id && (
+                        <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-500 border-2 border-white dark:border-zinc-900" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate flex items-center gap-1">
+                        {member.displayName || member.username}
+                        {roleBadge && <span className="text-xs">{roleBadge}</span>}
+                        {member.id === currentUser?.id && <span className="text-[10px] text-zinc-400">(bạn)</span>}
+                      </p>
+                      <p className="text-[10px] text-zinc-400 dark:text-zinc-500">{roleLabel}</p>
+                    </div>
+                  </button>
+                );
+              })}
+          </div>
+        </div>
+      )}
+
+      {/* Broadcast Modal */}
+      {isBroadcastOpen && room?.type === 'channel' && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm" onClick={() => setIsBroadcastOpen(false)}>
+          <div className="w-full max-w-md rounded-2xl bg-white dark:bg-zinc-900 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 px-6 py-4">
+              <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                <MessageSquare className="h-5 w-5 text-sky-500" />
+                Gửi thông báo hàng loạt
+              </h3>
+              <button onClick={() => setIsBroadcastOpen(false)} className="rounded-full p-1 text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="px-6 py-4 space-y-3">
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                Tin nhắn sẽ được gửi đến tất cả {childGroups.length} nhóm trong kênh &ldquo;{room.name}&rdquo;
+              </p>
+              <textarea
+                value={broadcastText}
+                onChange={e => setBroadcastText(e.target.value)}
+                rows={4}
+                placeholder="Nhập nội dung thông báo..."
+                className="w-full rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-sky-500 resize-none"
+                autoFocus
+              />
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={() => setIsBroadcastOpen(false)}
+                  className="flex-1 rounded-xl border border-zinc-200 dark:border-zinc-700 px-4 py-2.5 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+                >
+                  Hủy
+                </button>
+                <button
+                  disabled={!broadcastText.trim() || broadcastSending}
+                  onClick={async () => {
+                    if (!broadcastText.trim()) return;
+                    setBroadcastSending(true);
+                    try {
+                      const groupIds = childGroups.map(g => g.id);
+                      const sent = await matrixService.broadcastToChannel(room.id, broadcastText.trim(), groupIds);
+                      alert(`Đã gửi thông báo đến ${sent}/${groupIds.length} nhóm!`);
+                      setBroadcastText('');
+                      setIsBroadcastOpen(false);
+                    } catch (err) {
+                      console.error('Broadcast failed:', err);
+                      alert('Lỗi khi gửi thông báo hàng loạt');
+                    } finally {
+                      setBroadcastSending(false);
+                    }
+                  }}
+                  className="flex-1 rounded-xl bg-sky-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-600 disabled:opacity-50 transition-colors"
+                >
+                  {broadcastSending ? 'Đang gửi...' : `Gửi đến ${childGroups.length} nhóm`}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div >
   );
 }

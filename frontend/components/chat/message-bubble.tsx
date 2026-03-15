@@ -35,6 +35,7 @@ interface MessageBubbleProps {
   pollVotes?: Record<string, PollVote[]>;
   onButtonClick?: (msgId: string, buttonId: string, label: string) => void;
   onAvatarClick?: (userId: string) => void;
+  senderRole?: 'leader' | 'deputy' | 'member' | null;
 }
 
 const REACTION_ICONS: Record<string, string> = {
@@ -417,6 +418,7 @@ export function MessageBubble({
   pollVotes,
   onButtonClick,
   onAvatarClick,
+  senderRole,
 }: MessageBubbleProps) {
   const { language } = useUiStore();
   const [showAbove, setShowAbove] = useState(false);
@@ -967,8 +969,10 @@ export function MessageBubble({
 
         {/* Sender Name (for others) */}
         {!isMe && isFirst && (
-          <p className="mb-0.5 text-[11px] font-bold text-sky-600 dark:text-sky-400 select-none leading-none">
+          <p className="mb-0.5 text-[11px] font-bold text-sky-600 dark:text-sky-400 select-none leading-none flex items-center gap-1">
             {senderName}
+            {senderRole === 'leader' && <span title="Trưởng">👑</span>}
+            {senderRole === 'deputy' && <span title="Phó">⭐</span>}
           </p>
         )}
 
