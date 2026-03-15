@@ -2743,6 +2743,83 @@ class MatrixService {
     }
   }
 
+  // ─── Cleared Chat History ─────────────────────────────────
+  /** Save cleared-before timestamp to account data (syncs across devices) and room state (visible to others) */
+  async setClearedBefore(roomId: string, timestamp: number): Promise<void> {
+    const userId = this.getCurrentUserId()!;
+    // 1. Save to per-user per-room account_data (private, syncs across devices)
+    await this.request(
+      `/_matrix/client/v3/user/${encodeURIComponent(userId)}/rooms/${encodeURIComponent(roomId)}/account_data/io.piechat.cleared`,
+      { method: 'PUT', body: JSON.stringify({ cleared_before: timestamp }) },
+    );
+    // 2. Save to room state (visible to other members for consensus check)
+    await this.request(
+      `/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/state/io.piechat.cleared/${encodeURIComponent(userId)}`,
+      { method: 'PUT', body: JSON.stringify({ cleared_before: timestamp }) },
+    );
+  }
+
+  /** Read the user's cleared-before timestamp from account data */
+  async getClearedBefore(roomId: string): Promise<number> {
+    try {
+      const userId = this.getCurrentUserId()!;
+      const res = await this.request<{ cleared_before?: number }>(
+        `/_matrix/client/v3/user/${encodeURIComponent(userId)}/rooms/${encodeURIComponent(roomId)}/account_data/io.piechat.cleared`,
+      );
+      return res.cleared_before || 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  /** Check if ALL members have cleared and return the minimum cleared timestamp, or 0 if not all cleared */
+  async getAllMembersClearedBefore(roomId: string): Promise<number> {
+    try {
+      const members = await this.getRoomMembers(roomId);
+      if (members.length === 0) return 0;
+
+      // Read all io.piechat.cleared state events
+      const stateRes = await this.request<Array<{ type: string; state_key: string; content: { cleared_before?: number } }>>(
+        `/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/state`,
+      );
+      const clearedEvents = stateRes.filter(e => e.type === 'io.piechat.cleared');
+      const clearedMap = new Map<string, number>();
+      for (const ev of clearedEvents) {
+        if (ev.content?.cleared_before) {
+          clearedMap.set(ev.state_key, ev.content.cleared_before);
+        }
+      }
+
+      // Check every member has a cleared timestamp
+      for (const member of members) {
+        if (!clearedMap.has(member.id)) return 0; // This member hasn't cleared
+      }
+
+      // Return the minimum (earliest) cleared timestamp
+      return Math.min(...clearedMap.values());
+    } catch {
+      return 0;
+    }
+  }
+
+  /** Redact all messages older than the given timestamp */
+  async redactMessagesBefore(roomId: string, beforeTimestamp: number): Promise<number> {
+    try {
+      const msgs = await this.getMessages(roomId);
+      const toRedact = msgs.filter(m => m.timestamp <= beforeTimestamp && !m.redacted);
+      let count = 0;
+      for (const msg of toRedact) {
+        try {
+          await this.deleteMessage(roomId, msg.id, 'cleared by all members');
+          count++;
+        } catch { /* skip individual failures */ }
+      }
+      return count;
+    } catch {
+      return 0;
+    }
+  }
+
   // ─── Pinned Messages ─────────────────────────────────────
   async getPinnedEventIds(roomId: string): Promise<string[]> {
     try {

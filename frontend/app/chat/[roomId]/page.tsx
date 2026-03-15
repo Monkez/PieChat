@@ -270,11 +270,20 @@ export default function RoomPage() {
   }, [roomId, currentUser?.id, room]);
 
   useEffect(() => {
-    // Restore cleared-before timestamp for this room
-    try {
-      const saved = localStorage.getItem(`piechat_cleared_${roomId}`);
-      clearedBeforeRef.current = saved ? Number(saved) : 0;
-    } catch { clearedBeforeRef.current = 0; }
+    // Restore cleared-before timestamp from server (account-level, syncs across devices)
+    matrixService.getClearedBefore(roomId).then(ts => {
+      clearedBeforeRef.current = ts;
+      // Also sync to localStorage for sidebar usage
+      if (ts) {
+        try { localStorage.setItem(`piechat_cleared_${roomId}`, String(ts)); } catch {}
+      }
+    }).catch(() => {
+      // Fallback to localStorage
+      try {
+        const saved = localStorage.getItem(`piechat_cleared_${roomId}`);
+        clearedBeforeRef.current = saved ? Number(saved) : 0;
+      } catch { clearedBeforeRef.current = 0; }
+    });
     setFirstLoadDone(false);
     void loadMessages().then(() => {
       // Seed existing message IDs so they don't trigger notifications
@@ -1474,13 +1483,33 @@ export default function RoomPage() {
                   )}
                   {/* Clear Chat History */}
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       setIsMenuOpen(false);
-                      if (!confirm('Xóa toàn bộ lịch sử chat hiển thị? (Chỉ xóa trên thiết bị này)')) return;
+                      if (!confirm('Xóa toàn bộ lịch sử chat? (Xóa trên tài khoản này, nếu tất cả thành viên đều xóa thì tin nhắn sẽ bị xóa vĩnh viễn)')) return;
                       const now = Date.now();
                       clearedBeforeRef.current = now;
                       try { localStorage.setItem(`piechat_cleared_${roomId}`, String(now)); } catch {}
                       setMessages([]);
+
+                      // Save to server (account-level, syncs across devices)
+                      try {
+                        await matrixService.setClearedBefore(roomId, now);
+                      } catch (err) {
+                        console.error('Failed to save cleared state to server:', err);
+                      }
+
+                      // Check if all members have cleared → redact from server
+                      try {
+                        const consensusTs = await matrixService.getAllMembersClearedBefore(roomId);
+                        if (consensusTs > 0) {
+                          const count = await matrixService.redactMessagesBefore(roomId, consensusTs);
+                          if (count > 0) {
+                            console.log(`[PieChat] All members cleared — redacted ${count} messages from server`);
+                          }
+                        }
+                      } catch (err) {
+                        console.error('Consensus redact check failed:', err);
+                      }
                     }}
                     className="flex w-full items-center gap-2 px-4 py-2 text-sm text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-900/20"
                   >
