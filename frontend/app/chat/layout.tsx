@@ -943,7 +943,7 @@ export default function ChatLayout({
             <Bell className="h-6 w-6" />
           </Link>
           <Link
-            href="/chat/admin"
+            href="/admin"
             className="p-3 rounded-xl transition-all hover:bg-white/10"
             title="Admin Panel"
           >

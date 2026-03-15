@@ -1295,6 +1295,102 @@ router.get('/admin/system-info', async (req: Request, res: Response) => {
     });
 });
 
+// POST /auth/admin/broadcast — send system announcement to all users
+router.post('/admin/broadcast', async (req: Request, res: Response) => {
+    if (!isAdmin(req)) { res.status(403).json({ error: 'Unauthorized' }); return; }
+    const { title, body, mode } = req.body as { title?: string; body?: string; mode?: 'notification' | 'room' };
+    if (!title) { res.status(400).json({ error: 'title required' }); return; }
+
+    const token = await getAdminToken();
+    if (!token) { res.status(500).json({ error: 'Cannot get admin token' }); return; }
+
+    const serverName = process.env.DOMAIN || 'localhost';
+    const adminUserId = `@${ADMIN_USER}:${serverName}`;
+    const dbUsers = dbListAllUsers();
+    const userIds = dbUsers
+        .filter(u => !u.is_deactivated)
+        .map(u => `@${u.localpart}:${u.server_name || serverName}`)
+        .filter(id => id !== adminUserId);
+
+    let sent = 0;
+    const msgBody = body ? `📢 ${title}\n\n${body}` : `📢 ${title}`;
+
+    try {
+        if (mode === 'room') {
+            // Create a room and invite all users
+            const createRes = await fetch(`${matrixBaseUrl}/_matrix/client/v3/createRoom`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: `📢 ${title}`,
+                    topic: body || title,
+                    preset: 'private_chat',
+                    visibility: 'private',
+                    invite: userIds,
+                }),
+            });
+            if (!createRes.ok) {
+                const err = (await createRes.json()) as { error?: string };
+                res.status(500).json({ error: err.error || 'Cannot create room' });
+                return;
+            }
+            const { room_id } = (await createRes.json()) as { room_id: string };
+
+            // Send announcement message
+            const txnId = `broadcast-${Date.now()}`;
+            await fetch(`${matrixBaseUrl}/_matrix/client/v3/rooms/${encodeURIComponent(room_id)}/send/m.room.message/${txnId}`, {
+                method: 'PUT',
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    msgtype: 'm.text',
+                    body: msgBody,
+                    format: 'org.matrix.custom.html',
+                    formatted_body: `<h3>📢 ${title}</h3>${body ? `<p>${body}</p>` : ''}`,
+                }),
+            });
+            sent = userIds.length;
+        } else {
+            // Notification mode: send DM to each user
+            for (const uid of userIds) {
+                try {
+                    // Create DM room
+                    const dmRes = await fetch(`${matrixBaseUrl}/_matrix/client/v3/createRoom`, {
+                        method: 'POST',
+                        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            preset: 'trusted_private_chat',
+                            visibility: 'private',
+                            is_direct: true,
+                            invite: [uid],
+                        }),
+                    });
+                    if (!dmRes.ok) continue;
+                    const { room_id } = (await dmRes.json()) as { room_id: string };
+
+                    const txnId = `sys-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+                    await fetch(`${matrixBaseUrl}/_matrix/client/v3/rooms/${encodeURIComponent(room_id)}/send/m.room.message/${txnId}`, {
+                        method: 'PUT',
+                        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            msgtype: 'm.text',
+                            body: `📢 Thông báo hệ thống: ${title}${body ? `\n\n${body}` : ''}`,
+                        }),
+                    });
+                    sent++;
+                } catch {
+                    // skip individual user error
+                }
+            }
+        }
+
+        console.log(`[Admin] Broadcast "${title}" via ${mode}, sent to ${sent}/${userIds.length} users`);
+        res.json({ success: true, sent, total: userIds.length });
+    } catch (err) {
+        console.error('[Admin] Broadcast error:', err);
+        res.status(500).json({ error: 'Broadcast failed' });
+    }
+});
+
 // ─── Health check ───────────────────────────────────────
 
 router.get('/health', async (_req: Request, res: Response) => {

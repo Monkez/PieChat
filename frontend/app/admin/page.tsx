@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { ArrowLeft, Users, MessageSquare, Server, Shield, Search, Trash2, UserPlus, RefreshCw, Key, Activity, HardDrive, AlertTriangle, CheckCircle, XCircle, Loader2, Copy, Eye, Cpu, MemoryStick, Wifi, Phone, Lock, LogOut } from 'lucide-react';
+import { ArrowLeft, Users, MessageSquare, Server, Shield, Search, Trash2, UserPlus, RefreshCw, Key, Activity, HardDrive, AlertTriangle, CheckCircle, XCircle, Loader2, Copy, Eye, Cpu, MemoryStick, Wifi, Phone, Lock, LogOut, Megaphone, Send } from 'lucide-react';
 import Link from 'next/link';
 import { authUrl } from '@/lib/config';
+import { notificationService } from '@/lib/services/notification-service';
 
 interface MatrixUser {
   name: string;
@@ -50,7 +51,7 @@ interface SystemInfo {
   os: { platform: string; release: string; hostname: string; uptime: number; arch: string };
 }
 
-type TabId = 'overview' | 'users' | 'rooms' | 'logs';
+type TabId = 'overview' | 'users' | 'rooms' | 'logs' | 'broadcast';
 
 function extractPhone(userId: string): string {
   const match = userId.match(/@u(\d+):/);
@@ -102,6 +103,12 @@ export default function AdminPage() {
   const [logsLoading, setLogsLoading] = useState(false);
   const [logPhone, setLogPhone] = useState('');
   const [pendingOtps, setPendingOtps] = useState<Array<{ token: string; phone: string; code: string; matrixUsername: string; expiresAt: number; expired: boolean }>>([]);
+  // Broadcast
+  const [broadcastTitle, setBroadcastTitle] = useState('');
+  const [broadcastBody, setBroadcastBody] = useState('');
+  const [broadcastMode, setBroadcastMode] = useState<'notification' | 'room'>('notification');
+  const [broadcastSending, setBroadcastSending] = useState(false);
+  const [broadcastResult, setBroadcastResult] = useState<string | null>(null);
   // UI
   const [notice, setNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [resetUserId, setResetUserId] = useState<string | null>(null);
@@ -318,6 +325,7 @@ export default function AdminPage() {
     { id: 'users', label: 'Người dùng', icon: <Users className="h-4 w-4" /> },
     { id: 'rooms', label: 'Phòng chat', icon: <MessageSquare className="h-4 w-4" /> },
     { id: 'logs', label: 'OTP & Log', icon: <Key className="h-4 w-4" /> },
+    { id: 'broadcast', label: 'Broadcast', icon: <Megaphone className="h-4 w-4" /> },
   ];
 
   // ═══════════════════════════════════════════════════════
@@ -836,6 +844,131 @@ export default function AdminPage() {
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ═══════ BROADCAST TAB ═══════ */}
+        {activeTab === 'broadcast' && (
+          <div className="max-w-2xl space-y-5">
+            <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 shadow-sm space-y-5">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-lg shadow-amber-200/20">
+                  <Megaphone className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">Gửi thông báo hệ thống</h3>
+                  <p className="text-[11px] text-zinc-400">Gửi đến tất cả người dùng</p>
+                </div>
+              </div>
+
+              <input
+                type="text"
+                placeholder="Tiêu đề thông báo *"
+                value={broadcastTitle}
+                onChange={e => setBroadcastTitle(e.target.value)}
+                className="w-full rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 dark:text-zinc-100"
+              />
+
+              <textarea
+                placeholder="Nội dung chi tiết (tùy chọn)..."
+                value={broadcastBody}
+                onChange={e => setBroadcastBody(e.target.value)}
+                rows={4}
+                className="w-full rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 px-4 py-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-sky-500 dark:text-zinc-100"
+              />
+
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Phương thức gửi</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => setBroadcastMode('notification')}
+                    className={`rounded-xl border p-4 text-left transition-all ${
+                      broadcastMode === 'notification'
+                        ? 'border-sky-400 bg-sky-50 dark:bg-sky-900/20 ring-2 ring-sky-200 dark:ring-sky-800'
+                        : 'border-zinc-200 dark:border-zinc-700 hover:border-zinc-300'
+                    }`}
+                  >
+                    <p className="text-sm font-bold text-zinc-900 dark:text-zinc-100">💬 Gửi vào DM</p>
+                    <p className="text-[11px] text-zinc-500 mt-1">Tin nhắn đến trực tiếp mỗi user</p>
+                  </button>
+                  <button
+                    onClick={() => setBroadcastMode('room')}
+                    className={`rounded-xl border p-4 text-left transition-all ${
+                      broadcastMode === 'room'
+                        ? 'border-sky-400 bg-sky-50 dark:bg-sky-900/20 ring-2 ring-sky-200 dark:ring-sky-800'
+                        : 'border-zinc-200 dark:border-zinc-700 hover:border-zinc-300'
+                    }`}
+                  >
+                    <p className="text-sm font-bold text-zinc-900 dark:text-zinc-100">🏠 Tạo phòng thông báo</p>
+                    <p className="text-[11px] text-zinc-500 mt-1">Tạo nhóm mới mời tất cả user</p>
+                  </button>
+                </div>
+              </div>
+
+              <button
+                onClick={async () => {
+                  if (!broadcastTitle.trim()) return;
+                  setBroadcastSending(true);
+                  setBroadcastResult(null);
+                  try {
+                    const res = await fetch(authUrl(`/admin/broadcast?key=${encodeURIComponent(adminKey)}`), {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        title: broadcastTitle.trim(),
+                        body: broadcastBody.trim(),
+                        mode: broadcastMode,
+                      }),
+                    });
+                    const data = (await res.json()) as { success?: boolean; sent?: number; error?: string };
+                    if (data.success) {
+                      notificationService.addSystemAnnouncement(broadcastTitle, broadcastBody);
+                      setBroadcastResult(`✅ Đã gửi thành công đến ${data.sent ?? 0} người dùng`);
+                      setBroadcastTitle('');
+                      setBroadcastBody('');
+                    } else {
+                      setBroadcastResult(`❌ ${data.error || 'Gửi thất bại'}`);
+                    }
+                  } catch (err: any) {
+                    setBroadcastResult(`❌ Lỗi: ${err.message || 'Không thể kết nối'}`);
+                  } finally {
+                    setBroadcastSending(false);
+                  }
+                }}
+                disabled={broadcastSending || !broadcastTitle.trim()}
+                className={`flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold text-white shadow-lg transition-all ${
+                  broadcastSending || !broadcastTitle.trim()
+                    ? 'bg-zinc-300 dark:bg-zinc-700 cursor-not-allowed shadow-none'
+                    : 'bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 shadow-violet-200/30'
+                }`}
+              >
+                {broadcastSending ? (
+                  <><Loader2 className="h-4 w-4 animate-spin" /> Đang gửi...</>
+                ) : (
+                  <><Send className="h-4 w-4" /> Gửi thông báo</>
+                )}
+              </button>
+
+              {broadcastResult && (
+                <div className={`rounded-xl px-4 py-3 text-sm font-medium border ${
+                  broadcastResult.startsWith('✅')
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800'
+                    : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800'
+                }`}>
+                  {broadcastResult}
+                </div>
+              )}
+            </div>
+
+            {/* Recent broadcasts info */}
+            <div className="rounded-2xl bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 p-4">
+              <h4 className="text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wide mb-2">Hướng dẫn</h4>
+              <ul className="space-y-1 text-[11px] text-zinc-500">
+                <li>💬 <strong>DM</strong>: Gửi tin nhắn riêng đến mỗi user. User nhận hay mất DM mới.</li>
+                <li>🏠 <strong>Tạo phòng</strong>: Tạo 1 nhóm mới tên là &quot;📢 {'{tiêu đề}'}&quot; mời tất cả user vào.</li>
+                <li>📢 Thông báo cũng được lưu vào trang Thông báo của bạn.</li>
+              </ul>
             </div>
           </div>
         )}
