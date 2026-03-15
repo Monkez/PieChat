@@ -59,6 +59,9 @@ export interface Message {
   uploadProgress?: number;
   replyTo?: { eventId: string; senderId: string; body: string };
   edited?: boolean;
+  redacted?: boolean;
+  location?: { lat: number; lng: number; description?: string };
+  expiresAt?: number; // disappearing message timestamp
   inlineButtons?: Array<{ id: string; label: string; action?: string; url?: string; style?: 'primary' | 'secondary' | 'danger' }>;
   callInfo?: { type: 'voice' | 'video'; status: 'answered' | 'missed' | 'ongoing' | 'calling'; duration?: string };
   widget?: WidgetPayload;
@@ -1406,8 +1409,8 @@ class MatrixService {
 
       const messages = chunk
         .filter((event) => {
-          // Skip redacted (deleted) events — they have empty content or redacted_because
-          if (event.unsigned?.redacted_because) return false;
+          // Keep redacted messages visible as "recalled" placeholder
+          if (event.unsigned?.redacted_because) return event.type === 'm.room.message';
           if (event.type === 'm.room.message' && (!event.content || Object.keys(event.content).length === 0)) return false;
           if (event.type === 'm.room.message') return true;
           // Only show the invite event for a call, we will enrich its content
@@ -1415,6 +1418,20 @@ class MatrixService {
           return false;
         })
         .map((event) => {
+          // Handle redacted (recalled) messages
+          if (event.unsigned?.redacted_because) {
+            return {
+              id: event.event_id,
+              roomId,
+              senderId: event.sender,
+              content: '🚫 Tin nhắn đã bị thu hồi',
+              timestamp: event.origin_server_ts,
+              status: 'read' as const,
+              msgtype: 'm.text',
+              redacted: true,
+            };
+          }
+
           const msgReactions: Record<string, number> = {};
           const msgReactionDetails: Record<string, string[]> = {};
           reactions.filter(r => (r.content as any)?.['m.relates_to']?.event_id === event.event_id)
@@ -1620,6 +1637,22 @@ class MatrixService {
             thumbnailUrl,
             replyTo,
             edited,
+            location: (() => {
+              const loc = event.content?.['io.piechat.location'] as { lat?: number; lng?: number; description?: string } | undefined;
+              if (loc?.lat != null && loc?.lng != null) return { lat: loc.lat, lng: loc.lng, description: loc.description };
+              // Also support m.location standard
+              const geoUri = event.content?.geo_uri as string | undefined;
+              if (geoUri) {
+                const match = geoUri.match(/geo:([\d.-]+),([\d.-]+)/);
+                if (match) return { lat: parseFloat(match[1]), lng: parseFloat(match[2]), description: event.content?.body as string };
+              }
+              return undefined;
+            })(),
+            expiresAt: (() => {
+              const ttl = event.content?.['io.piechat.ttl'] as number | undefined;
+              if (ttl && event.origin_server_ts) return event.origin_server_ts + ttl;
+              return undefined;
+            })(),
             inlineButtons: (event.content?.['io.piechat.buttons'] as Message['inlineButtons']) || undefined,
             callInfo: (event as any)._callInfo || undefined,
             widget: (() => {
@@ -1985,6 +2018,60 @@ class MatrixService {
     };
     this.lastMessageCache.set(roomId, msg);
     return msg;
+  }
+
+  // ─── Location Message ──────────────────────────────────
+  async sendLocationMessage(roomId: string, lat: number, lng: number, description?: string): Promise<Message> {
+    const txnId = secureId('loc');
+    const label = description || `📍 ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+    const mapUrl = `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=16/${lat}/${lng}`;
+    const body = {
+      msgtype: 'm.location',
+      body: `${label}\n${mapUrl}`,
+      geo_uri: `geo:${lat},${lng}`,
+      'io.piechat.location': { lat, lng, description: label },
+    };
+    const response = await this.request<{ event_id: string }>(
+      `/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/send/m.room.message/${txnId}`,
+      { method: 'PUT', body: JSON.stringify(body) },
+    );
+    const userId = typeof window !== 'undefined' ? localStorage.getItem('matrix_user_id') || 'unknown' : 'unknown';
+    const msg: Message = {
+      id: response.event_id, roomId, senderId: userId,
+      content: label, timestamp: Date.now(), status: 'sent',
+      msgtype: 'm.location',
+      location: { lat, lng, description: label },
+    };
+    this.lastMessageCache.set(roomId, msg);
+    return msg;
+  }
+
+  // ─── Disappearing Message ─────────────────────────────
+  async sendDisappearingMessage(roomId: string, content: string, ttlMs: number): Promise<Message> {
+    const txnId = secureId('ttl');
+    const body = {
+      msgtype: 'm.text',
+      body: content,
+      'io.piechat.ttl': ttlMs,
+    };
+    const response = await this.request<{ event_id: string }>(
+      `/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/send/m.room.message/${txnId}`,
+      { method: 'PUT', body: JSON.stringify(body) },
+    );
+    const userId = typeof window !== 'undefined' ? localStorage.getItem('matrix_user_id') || 'unknown' : 'unknown';
+    const msg: Message = {
+      id: response.event_id, roomId, senderId: userId,
+      content, timestamp: Date.now(), status: 'sent',
+      msgtype: 'm.text',
+      expiresAt: Date.now() + ttlMs,
+    };
+    this.lastMessageCache.set(roomId, msg);
+    return msg;
+  }
+
+  // ─── Recall (unsend) a message ────────────────────────
+  async recallMessage(roomId: string, eventId: string): Promise<void> {
+    return this.deleteMessage(roomId, eventId, 'recalled by sender');
   }
 
   async sendContactMessage(roomId: string, phone: string, displayName: string, userId?: string): Promise<Message> {

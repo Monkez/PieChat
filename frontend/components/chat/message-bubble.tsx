@@ -3,7 +3,7 @@
 import { useState, useRef, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import Image from 'next/image';
-import { MoreVertical, Reply, Forward, Info, Trash2, Repeat, Download, Play, Pause, FileIcon, Copy, Pin, PinOff, Pencil, Phone, CreditCard, KeyRound, Link2, Code2 } from 'lucide-react';
+import { MoreVertical, Reply, Forward, Info, Trash2, Repeat, Download, Play, Pause, FileIcon, Copy, Pin, PinOff, Pencil, Phone, CreditCard, KeyRound, Link2, Code2, MapPin, Timer, Ban } from 'lucide-react';
 import { Message } from '@/lib/services/matrix-service';
 import { cn } from '@/lib/utils';
 import { Avatar } from '@/components/ui/avatar';
@@ -24,7 +24,7 @@ interface MessageBubbleProps {
   activeMenuId: string | null;
   setActiveMenuId: (id: string | null) => void;
   onReaction: (msgId: string, emoji: string) => void;
-  onMenuAction: (action: 'reply' | 'forward' | 'details' | 'delete' | 'edit' | 'pin', msg: Message) => void;
+  onMenuAction: (action: 'reply' | 'forward' | 'details' | 'delete' | 'edit' | 'pin' | 'recall', msg: Message) => void;
   onRetry: (msgId: string) => void;
   getStatusLabel: (status: Message['status']) => string;
   onContactAddFriend?: (userId: string) => void;
@@ -1114,6 +1114,11 @@ export function MessageBubble({
                   )
                 )}
                 <div className="my-1.5 h-px bg-zinc-100 dark:bg-zinc-700/50" />
+                {isMe && !msg.redacted && (Date.now() - msg.timestamp < 5 * 60 * 1000) && (
+                  <button onClick={() => { onMenuAction('recall', msg); setActiveMenuId(null); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20 transition-all text-nowrap">
+                    <Ban className="h-4 w-4" /> Thu hồi
+                  </button>
+                )}
                 <button onClick={() => { onMenuAction('delete', msg); setActiveMenuId(null); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-900/20 transition-all text-nowrap">
                   <Trash2 className="h-4 w-4" /> {t(language, 'msgDelete' as any) || 'Delete'}
                 </button>
@@ -1211,6 +1216,64 @@ export function MessageBubble({
               messageId={msg.id}
               onAction={onWidgetAction}
             />
+          </div>
+        ) : msg.redacted ? (
+          /* Recalled / Redacted Message */
+          <div className="flex items-center gap-2 py-1">
+            <Ban className="h-4 w-4 text-zinc-400 shrink-0" />
+            <span className="text-[13px] italic text-zinc-400 dark:text-zinc-500 select-none">
+              Tin nhắn đã bị thu hồi
+            </span>
+          </div>
+        ) : msg.location ? (
+          /* Location Message */
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <MapPin className="h-4 w-4 text-rose-500 shrink-0" />
+              <span className="text-[13px] font-medium">{msg.location.description || 'Vị trí'}</span>
+            </div>
+            <a
+              href={`https://www.openstreetmap.org/?mlat=${msg.location.lat}&mlon=${msg.location.lng}#map=16/${msg.location.lat}/${msg.location.lng}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-700 hover:opacity-90 transition-opacity"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={`https://staticmap.openstreetmap.de/staticmap.php?center=${msg.location.lat},${msg.location.lng}&zoom=15&size=300x150&maptype=mapnik&markers=${msg.location.lat},${msg.location.lng},ol-marker`}
+                alt="map"
+                className="w-full h-[150px] object-cover"
+              />
+              <div className="px-2.5 py-1.5 bg-zinc-50 dark:bg-zinc-800 text-[10px] text-zinc-500">
+                📍 {msg.location.lat.toFixed(5)}, {msg.location.lng.toFixed(5)} • Mở bản đồ →
+              </div>
+            </a>
+          </div>
+        ) : msg.expiresAt ? (
+          /* Disappearing Message */
+          <div>
+            <div className="break-words leading-snug text-[14px] lg:text-sm">
+              {msg.expiresAt > Date.now() ? (
+                highlightContent(msg.content)
+              ) : (
+                <span className="italic text-zinc-400 dark:text-zinc-500 flex items-center gap-1.5">
+                  <Timer className="h-3.5 w-3.5" /> Tin nhắn đã hết hạn
+                </span>
+              )}
+            </div>
+            {msg.expiresAt > Date.now() && (
+              <div className="flex items-center gap-1 mt-1 text-[10px] text-amber-500 dark:text-amber-400 font-medium">
+                <Timer className="h-3 w-3" />
+                Tự hủy {(() => {
+                  const remaining = msg.expiresAt - Date.now();
+                  const mins = Math.ceil(remaining / 60000);
+                  const hours = Math.ceil(remaining / 3600000);
+                  if (hours > 24) return `sau ${Math.ceil(hours / 24)} ngày`;
+                  if (hours > 1) return `sau ${hours} giờ`;
+                  return `sau ${mins} phút`;
+                })()}
+              </div>
+            )}
           </div>
         ) : (
           /* Text Message Content */

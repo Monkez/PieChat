@@ -4,7 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Send, Paperclip, MoreVertical, Phone, Video, Search, UserPlus, Crown, ShieldCheck, Trash2, Users, GripVertical, Shield, MessageSquare, Plus, ArrowLeft, FolderOpen, X, Check, BellOff, Bell, LogOut, Ban, Pin, Copy, Download, Eraser, ImageIcon, Wallpaper } from 'lucide-react';
+import { Send, Paperclip, MoreVertical, Phone, Video, Search, UserPlus, Crown, ShieldCheck, Trash2, Users, GripVertical, Shield, MessageSquare, Plus, ArrowLeft, FolderOpen, X, Check, BellOff, Bell, LogOut, Ban, Pin, Copy, Download, Eraser, ImageIcon, Wallpaper, MapPin, BarChart3, Timer } from 'lucide-react';
 import { MessageBubble } from '@/components/chat/message-bubble';
 import { ChatInput, type ReplyEditState } from '@/components/chat/chat-input';
 import { MediaGallery } from '@/components/chat/media-gallery';
@@ -20,6 +20,7 @@ import { useChatNotifications, scheduleReminderNotification, schedulePollExpiryN
 import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import type { WidgetPayload } from '@/lib/widget-sdk';
+import { scheduledMessageService } from '@/lib/services/scheduled-message-service';
 
 export default function RoomPage() {
   const params = useParams();
@@ -35,6 +36,9 @@ export default function RoomPage() {
   const [activeMenuMessageId, setActiveMenuMessageId] = useState<string | null>(null);
   const [pinnedMessage, setPinnedMessage] = useState<Message | null>(null);
   const [profileUserId, setProfileUserId] = useState<string | null>(null);
+  const [isGroupStatsOpen, setIsGroupStatsOpen] = useState(false);
+  const [disappearingTtl, setDisappearingTtl] = useState<number | null>(null);
+  const [showDisappearingDialog, setShowDisappearingDialog] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const userScrolledUpRef = useRef(false);
@@ -355,13 +359,18 @@ export default function RoomPage() {
       senderId: currentUser?.id || 'me',
       content,
       timestamp: Date.now(),
-      status: 'sending'
+      status: 'sending',
+      ...(disappearingTtl ? { expiresAt: Date.now() + disappearingTtl } : {}),
     };
     setMessages((prev) => [...prev, tempMsg]);
     setMessage('');
 
     try {
-      await sendMessage(roomId, content);
+      if (disappearingTtl) {
+        await matrixService.sendDisappearingMessage(roomId, content, disappearingTtl);
+      } else {
+        await sendMessage(roomId, content);
+      }
       setMessages((prev) => prev.map((item) => (item.id === tempId ? { ...item, status: 'sent' } : item)));
       await loadMessages(true);
     } catch {
@@ -889,6 +898,14 @@ export default function RoomPage() {
           setMessages(prev => prev.filter(m => m.id !== msg.id));
         }).catch(() => alert('Không thể xóa tin nhắn'));
       }
+    } else if (action === 'recall') {
+      if (confirm('Thu hồi tin nhắn này? Mọi người sẽ không còn thấy nội dung.')) {
+        matrixService.recallMessage(roomId, msg.id).then(() => {
+          setMessages(prev => prev.map(m =>
+            m.id === msg.id ? { ...m, content: '🚫 Tin nhắn đã bị thu hồi', redacted: true } : m
+          ));
+        }).catch(() => alert('Không thể thu hồi tin nhắn'));
+      }
     } else if (action === 'forward') {
       setForwardingMessage(msg);
     } else if (action === 'pin') {
@@ -1383,6 +1400,68 @@ export default function RoomPage() {
                     >
                       <Eraser className="h-4 w-4" />
                       Xóa hình nền
+                    </button>
+                  )}
+                  {/* Location Sharing */}
+                  <button
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      if (!navigator.geolocation) {
+                        alert('Trình duyệt không hỗ trợ định vị');
+                        return;
+                      }
+                      navigator.geolocation.getCurrentPosition(
+                        async (pos) => {
+                          try {
+                            const msg = await matrixService.sendLocationMessage(
+                              roomId,
+                              pos.coords.latitude,
+                              pos.coords.longitude,
+                            );
+                            setMessages(prev => [...prev, msg]);
+                          } catch (err) {
+                            alert('Không thể gửi vị trí');
+                          }
+                        },
+                        (err) => {
+                          if (err.code === 1) alert('Bạn đã từ chối quyền truy cập vị trí');
+                          else alert('Không thể lấy vị trí: ' + err.message);
+                        },
+                        { enableHighAccuracy: true, timeout: 10000 }
+                      );
+                    }}
+                    className="flex w-full items-center gap-2 px-4 py-2 text-sm text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                  >
+                    <MapPin className="h-4 w-4" />
+                    Chia sẻ vị trí
+                  </button>
+                  {/* Disappearing Messages */}
+                  <button
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      setShowDisappearingDialog(true);
+                    }}
+                    className="flex w-full items-center gap-2 px-4 py-2 text-sm text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                  >
+                    <Timer className="h-4 w-4" />
+                    Tin nhắn tự hủy
+                    {disappearingTtl && (
+                      <span className="ml-auto text-[10px] text-amber-500 font-bold">
+                        {disappearingTtl >= 86400000 ? `${Math.floor(disappearingTtl / 86400000)}d` : disappearingTtl >= 3600000 ? `${Math.floor(disappearingTtl / 3600000)}h` : `${Math.floor(disappearingTtl / 60000)}m`}
+                      </span>
+                    )}
+                  </button>
+                  {/* Group Stats */}
+                  {room?.type !== 'dm' && (
+                    <button
+                      onClick={() => {
+                        setIsMenuOpen(false);
+                        setIsGroupStatsOpen(true);
+                      }}
+                      className="flex w-full items-center gap-2 px-4 py-2 text-sm text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                    >
+                      <BarChart3 className="h-4 w-4" />
+                      Thống kê nhóm
                     </button>
                   )}
                   {/* Clear Chat History */}
@@ -2021,6 +2100,18 @@ export default function RoomPage() {
                   </div>
                 </div>
               )}
+              {/* Disappearing mode indicator */}
+              {disappearingTtl && (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 dark:bg-amber-900/20 border-t border-amber-200 dark:border-amber-800">
+                  <Timer className="h-3.5 w-3.5 text-amber-500" />
+                  <span className="text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                    Tin nhắn tự hủy sau {disappearingTtl >= 86400000 ? `${Math.floor(disappearingTtl / 86400000)} ngày` : disappearingTtl >= 3600000 ? `${Math.floor(disappearingTtl / 3600000)} giờ` : `${Math.floor(disappearingTtl / 60000)} phút`}
+                  </span>
+                  <button onClick={() => setDisappearingTtl(null)} className="ml-auto text-[10px] text-amber-500 hover:text-amber-700 font-bold">
+                    Tắt
+                  </button>
+                </div>
+              )}
               <ChatInput
                 onSendMessage={handleSendMessage}
                 onSendFiles={handleSendFiles}
@@ -2043,13 +2134,17 @@ export default function RoomPage() {
                     void handleSendMessage(content);
                     return;
                   }
+                  scheduledMessageService.add({
+                    roomId,
+                    content,
+                    scheduledAt: sendAt,
+                    type: disappearingTtl ? 'disappearing' : 'text',
+                    ttlMs: disappearingTtl || undefined,
+                  });
                   const dt = new Date(sendAt);
                   const timeStr = dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
                   const dateStr = dt.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
                   alert(`📨 Tin nhắn sẽ được gửi lúc ${timeStr} ngày ${dateStr}`);
-                  setTimeout(() => {
-                    void handleSendMessage(content);
-                  }, delay);
                 }}
                 members={room?.members.map(m => ({
                   id: m.id,
@@ -2623,6 +2718,162 @@ export default function RoomPage() {
           e.target.value = '';
         }}
       />
+
+      {/* Scheduled Message Checker */}
+      <ScheduledMessageChecker roomId={roomId} onSend={handleSendMessage} />
+
+      {/* Disappearing Message TTL Dialog */}
+      {showDisappearingDialog && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setShowDisappearingDialog(false)}>
+          <div className="w-[320px] rounded-2xl bg-white dark:bg-zinc-900 shadow-2xl border border-zinc-200 dark:border-zinc-700 p-5" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 mb-1 flex items-center gap-2">
+              <Timer className="h-4 w-4 text-amber-500" /> Tin nhắn tự hủy
+            </h3>
+            <p className="text-[11px] text-zinc-400 mb-4">Tin nhắn sẽ biến mất sau thời gian đã chọn</p>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { label: 'Tắt', value: null },
+                { label: '5 phút', value: 5 * 60 * 1000 },
+                { label: '30 phút', value: 30 * 60 * 1000 },
+                { label: '1 giờ', value: 60 * 60 * 1000 },
+                { label: '6 giờ', value: 6 * 60 * 60 * 1000 },
+                { label: '1 ngày', value: 24 * 60 * 60 * 1000 },
+                { label: '3 ngày', value: 3 * 24 * 60 * 60 * 1000 },
+                { label: '7 ngày', value: 7 * 24 * 60 * 60 * 1000 },
+              ].map((opt) => (
+                <button
+                  key={opt.label}
+                  onClick={() => {
+                    setDisappearingTtl(opt.value);
+                    setShowDisappearingDialog(false);
+                  }}
+                  className={cn(
+                    "rounded-xl px-3 py-2.5 text-sm font-medium border transition-all",
+                    disappearingTtl === opt.value
+                      ? "bg-amber-100 border-amber-400 text-amber-700 dark:bg-amber-900/30 dark:border-amber-600 dark:text-amber-400"
+                      : "bg-zinc-50 border-zinc-200 text-zinc-700 hover:bg-zinc-100 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300"
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Group Statistics Modal */}
+      {isGroupStatsOpen && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setIsGroupStatsOpen(false)}>
+          <div className="w-[400px] max-h-[80vh] rounded-2xl bg-white dark:bg-zinc-900 shadow-2xl border border-zinc-200 dark:border-zinc-700 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-100 dark:border-zinc-800">
+              <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                <BarChart3 className="h-4 w-4 text-sky-500" /> Thống kê nhóm
+              </h3>
+              <button onClick={() => setIsGroupStatsOpen(false)} className="p-1 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4 overflow-y-auto max-h-[60vh]">
+              {/* Overview */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="rounded-xl bg-sky-50 dark:bg-sky-900/20 p-3 text-center">
+                  <p className="text-lg font-bold text-sky-600">{messages.length}</p>
+                  <p className="text-[10px] text-zinc-500">Tin nhắn</p>
+                </div>
+                <div className="rounded-xl bg-violet-50 dark:bg-violet-900/20 p-3 text-center">
+                  <p className="text-lg font-bold text-violet-600">{new Set(messages.map(m => m.senderId)).size}</p>
+                  <p className="text-[10px] text-zinc-500">Thành viên</p>
+                </div>
+                <div className="rounded-xl bg-emerald-50 dark:bg-emerald-900/20 p-3 text-center">
+                  <p className="text-lg font-bold text-emerald-600">{messages.filter(m => m.fileUrl).length}</p>
+                  <p className="text-[10px] text-zinc-500">Media</p>
+                </div>
+              </div>
+
+              {/* Per-user stats */}
+              <div>
+                <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wide mb-2">Thành viên hoạt động</h4>
+                {(() => {
+                  const userStats: Record<string, { count: number; last: number }> = {};
+                  messages.forEach(m => {
+                    if (!userStats[m.senderId]) userStats[m.senderId] = { count: 0, last: 0 };
+                    userStats[m.senderId].count++;
+                    if (m.timestamp > userStats[m.senderId].last) userStats[m.senderId].last = m.timestamp;
+                  });
+                  const sorted = Object.entries(userStats).sort((a, b) => b[1].count - a[1].count);
+                  const maxCount = sorted[0]?.[1].count || 1;
+                  return sorted.slice(0, 10).map(([userId, stats], i) => {
+                    const name = userId.split(':')[0].replace('@', '').replace(/^u/, '');
+                    const pct = Math.round((stats.count / maxCount) * 100);
+                    return (
+                      <div key={userId} className="flex items-center gap-3 py-1.5">
+                        <span className="text-[10px] font-bold text-zinc-400 w-4">{i + 1}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between mb-0.5">
+                            <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 truncate">{name}</span>
+                            <span className="text-[10px] text-zinc-400 tabular-nums shrink-0">{stats.count} tin</span>
+                          </div>
+                          <div className="h-1.5 rounded-full bg-zinc-100 dark:bg-zinc-800 overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-gradient-to-r from-sky-400 to-violet-500 transition-all"
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+
+              {/* Active hours */}
+              <div>
+                <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wide mb-2">Giờ hoạt động</h4>
+                <div className="flex items-end gap-px h-16">
+                  {(() => {
+                    const hours = Array(24).fill(0);
+                    messages.forEach(m => {
+                      const h = new Date(m.timestamp).getHours();
+                      hours[h]++;
+                    });
+                    const max = Math.max(...hours, 1);
+                    return hours.map((count, h) => (
+                      <div key={h} className="flex-1 flex flex-col items-center">
+                        <div
+                          className="w-full rounded-t bg-gradient-to-t from-sky-400 to-sky-300 dark:from-sky-600 dark:to-sky-500 transition-all"
+                          style={{ height: `${Math.max((count / max) * 100, 2)}%` }}
+                          title={`${h}:00 — ${count} tin`}
+                        />
+                        {h % 6 === 0 && (
+                          <span className="text-[8px] text-zinc-400 mt-0.5">{h}h</span>
+                        )}
+                      </div>
+                    ));
+                  })()}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div >
   );
+}
+
+// ─── Scheduled Message Checker Component ─────────────
+function ScheduledMessageChecker({ roomId, onSend }: { roomId: string; onSend: (content: string) => void }) {
+  useEffect(() => {
+    const check = () => {
+      const due = scheduledMessageService.getDueMessages().filter(m => m.roomId === roomId);
+      for (const msg of due) {
+        onSend(msg.content);
+        scheduledMessageService.markSent(msg.id);
+      }
+    };
+    check();
+    const interval = setInterval(check, 30_000); // check every 30s
+    return () => clearInterval(interval);
+  }, [roomId, onSend]);
+  return null;
 }
