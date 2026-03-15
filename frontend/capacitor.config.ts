@@ -5,9 +5,10 @@ const config: CapacitorConfig = {
     appName: 'PieChat',
     webDir: 'out',
     server: {
-        // For development: point to your Next.js dev server on LAN
-        // Replace with your PC's LAN IP when testing on a real device
-        url: 'http://192.168.1.44:3000',
+        // For Android Emulator: use 10.0.2.2 to reach host machine's dev server
+        // For real device: use LAN IP  
+        // For production: use the deployed server URL
+        url: 'https://piechat.site',
         cleartext: true,
         androidScheme: 'https',
     },
@@ -15,6 +16,12 @@ const config: CapacitorConfig = {
         buildOptions: {
             keystorePath: undefined,
             keystoreAlias: undefined,
+        },
+    },
+    plugins: {
+        // Allow geolocation
+        Geolocation: {
+            // No special config needed
         },
     },
 };
