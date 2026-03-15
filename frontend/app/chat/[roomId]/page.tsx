@@ -44,6 +44,8 @@ export default function RoomPage() {
   const userScrolledUpRef = useRef(false);
   const clearedBeforeRef = useRef<number>(0);
   const prevMessageCountRef = useRef(0);
+  const lastReadEventRef = useRef<string>('');
+  const lastMsgIdsRef = useRef<string>('');
 
   const {
     currentUser,
@@ -201,11 +203,17 @@ export default function RoomPage() {
     try {
       const msgs = await matrixService.getMessages(roomId);
       const cutoff = clearedBeforeRef.current;
-      setMessages((prev) => {
-        const localDrafts = prev.filter((item) => item.id.startsWith('temp-') && item.status !== 'sent');
-        const filteredMsgs = cutoff ? msgs.filter(m => m.timestamp > cutoff) : msgs;
-        return [...filteredMsgs, ...localDrafts].sort((a, b) => a.timestamp - b.timestamp);
-      });
+      const filteredMsgs = cutoff ? msgs.filter(m => m.timestamp > cutoff) : msgs;
+      // Build ID signature to skip state update when messages haven't changed
+      const newIds = filteredMsgs.map(m => `${m.id}:${m.status || ''}:${JSON.stringify(m.reactions || {})}`).join(',');
+      const shouldUpdate = newIds !== lastMsgIdsRef.current;
+      if (shouldUpdate) {
+        lastMsgIdsRef.current = newIds;
+        setMessages((prev) => {
+          const localDrafts = prev.filter((item) => item.id.startsWith('temp-') && item.status !== 'sent');
+          return [...filteredMsgs, ...localDrafts].sort((a, b) => a.timestamp - b.timestamp);
+        });
+      }
       // Sync poll votes from timeline
       const serverVotes = matrixService.getLastPollVotes();
       if (Object.keys(serverVotes).length > 0) {
@@ -220,7 +228,11 @@ export default function RoomPage() {
       // Send read receipt for the last message to clear unread badge
       if (msgs.length > 0) {
         const lastMsg = msgs[msgs.length - 1];
-        void matrixService.sendReadMarker(roomId, lastMsg.id);
+        // Only send read marker when last message ID changes
+        if (lastMsg.id !== lastReadEventRef.current) {
+          lastReadEventRef.current = lastMsg.id;
+          void matrixService.sendReadMarker(roomId, lastMsg.id);
+        }
       }
       // Notify about new messages (only during silent polls, not initial load)
       if (silent && currentUser?.id) {
@@ -340,20 +352,18 @@ export default function RoomPage() {
     }
   }, [messages, currentUser?.id]);
 
-  const displayedMessages = roomSearch.trim()
-    ? messages.filter((item) => item.content.toLowerCase().includes(roomSearch.trim().toLowerCase()))
-    : messages;
-  const hasFailedMessages = messages.some((item) => item.status === 'failed');
+  const displayedMessages = useMemo(() => {
+    const q = roomSearch.trim().toLowerCase();
+    return q ? messages.filter((item) => item.content.toLowerCase().includes(q)) : messages;
+  }, [messages, roomSearch]);
 
-  const getStatusLabel = (status: Message['status']) => {
-    if (status === 'sending') {
-      return t(language, 'roomStatusSending');
-    }
-    if (status === 'failed') {
-      return t(language, 'roomStatusFailed');
-    }
+  const hasFailedMessages = useMemo(() => messages.some((item) => item.status === 'failed'), [messages]);
+
+  const getStatusLabel = useCallback((status: Message['status']) => {
+    if (status === 'sending') return t(language, 'roomStatusSending');
+    if (status === 'failed') return t(language, 'roomStatusFailed');
     return t(language, 'roomStatusSent');
-  };
+  }, [language]);
 
   const handleSendMessage = async (contentOrEvent: React.FormEvent | string) => {
     let content = '';
@@ -954,6 +964,42 @@ export default function RoomPage() {
   const handleTyping = useCallback((typing: boolean) => {
     matrixService.sendTyping(roomId, typing);
   }, [roomId]);
+
+  // Stable callbacks for MessageBubble (prevents re-renders)
+  const handleReaction = useCallback((msgId: string, emoji: string) => {
+    // Optimistic update — update immediately
+    setMessages(prev => prev.map(m => {
+      if (m.id !== msgId) return m;
+      const reactions = { ...(m.reactions || {}) };
+      reactions[emoji] = (reactions[emoji] || 0) + 1;
+      return { ...m, reactions };
+    }));
+    // Then send to server
+    sendReaction(roomId, msgId, emoji).catch(() => {
+      // Revert on failure
+      setMessages(prev => prev.map(m => {
+        if (m.id !== msgId) return m;
+        const reactions = { ...(m.reactions || {}) };
+        reactions[emoji] = Math.max((reactions[emoji] || 1) - 1, 0);
+        if (reactions[emoji] === 0) delete reactions[emoji];
+        return { ...m, reactions };
+      }));
+    });
+  }, [roomId]);
+
+  const handleButtonClick = useCallback((msgId: string, btnId: string, label: string) => {
+    matrixService.sendButtonClick(roomId, msgId, btnId, label).catch(console.error);
+  }, [roomId]);
+
+  const handleWidgetAction = useCallback((messageId: string, action: string, data: unknown) => {
+    if (action === 'copy' && typeof data === 'string') {
+      navigator.clipboard?.writeText(data).catch(() => {});
+    }
+  }, []);
+
+  const handleAvatarClick = useCallback((userId: string) => {
+    setProfileUserId(userId);
+  }, []);
 
   // Poll typing users
   useEffect(() => {
@@ -2052,26 +2098,7 @@ export default function RoomPage() {
                       searchQuery={roomSearch}
                       activeMenuId={activeMenuMessageId}
                       setActiveMenuId={setActiveMenuMessageId}
-                      onReaction={(msgId, emoji) => {
-                        // Optimistic update — update immediately
-                        setMessages(prev => prev.map(m => {
-                          if (m.id !== msgId) return m;
-                          const reactions = { ...(m.reactions || {}) };
-                          reactions[emoji] = (reactions[emoji] || 0) + 1;
-                          return { ...m, reactions };
-                        }));
-                        // Then send to server
-                        sendReaction(roomId, msgId, emoji).catch(() => {
-                          // Revert on failure
-                          setMessages(prev => prev.map(m => {
-                            if (m.id !== msgId) return m;
-                            const reactions = { ...(m.reactions || {}) };
-                            reactions[emoji] = Math.max((reactions[emoji] || 1) - 1, 0);
-                            if (reactions[emoji] === 0) delete reactions[emoji];
-                            return { ...m, reactions };
-                          }));
-                        });
-                      }}
+                      onReaction={handleReaction}
                       onMenuAction={handleMessageAction}
                       onRetry={retryMessage}
                       getStatusLabel={getStatusLabel}
@@ -2082,17 +2109,9 @@ export default function RoomPage() {
                       onPollVote={handlePollVote}
                       currentUserId={currentUserId}
                       pollVotes={pollVotes}
-                      onButtonClick={(msgId, btnId, label) => {
-                        matrixService.sendButtonClick(roomId, msgId, btnId, label).catch(console.error);
-                      }}
-                      onWidgetAction={(messageId, action, data) => {
-                        console.log('[Widget Action]', { messageId, action, data });
-                        // Handle copy action from code widgets
-                        if (action === 'copy' && typeof data === 'string') {
-                          navigator.clipboard?.writeText(data).catch(() => {});
-                        }
-                      }}
-                      onAvatarClick={(userId) => setProfileUserId(userId)}
+                      onButtonClick={handleButtonClick}
+                      onWidgetAction={handleWidgetAction}
+                      onAvatarClick={handleAvatarClick}
                       senderRole={senderRole}
                       isPinned={pinnedMessageIds.includes(msg.id)}
                       onPinMessage={handlePinMessage}

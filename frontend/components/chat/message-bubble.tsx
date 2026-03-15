@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useMemo, useCallback } from 'react';
+import { useState, useRef, useMemo, useCallback, memo } from 'react';
 import { createPortal } from 'react-dom';
 import Image from 'next/image';
 import { MoreVertical, Reply, Forward, Info, Trash2, Repeat, Download, Play, Pause, FileIcon, Copy, Pin, PinOff, Pencil, Phone, CreditCard, KeyRound, Link2, Code2, MapPin, Timer, Ban } from 'lucide-react';
@@ -402,7 +402,7 @@ function VideoAttachment({ msg }: { msg: Message }) {
   );
 }
 
-export function MessageBubble({
+function MessageBubbleInner({
   message: msg,
   isMe,
   senderName,
@@ -1432,3 +1432,24 @@ export function MessageBubble({
     </>
   );
 }
+
+export const MessageBubble = memo(MessageBubbleInner, (prev, next) => {
+  // Custom shallow comparison — only re-render when meaningful data changes
+  if (prev.message.id !== next.message.id) return false;
+  if (prev.message.content !== next.message.content) return false;
+  if (prev.message.status !== next.message.status) return false;
+  if (prev.message.redacted !== next.message.redacted) return false;
+  if (prev.isMe !== next.isMe) return false;
+  if (prev.isFirst !== next.isFirst) return false;
+  if (prev.searchQuery !== next.searchQuery) return false;
+  if (prev.isPinned !== next.isPinned) return false;
+  if (prev.activeMenuId !== next.activeMenuId) return false;
+  if (prev.senderRole !== next.senderRole) return false;
+  // Compare reactions by serialization (small objects)
+  const prevR = JSON.stringify(prev.message.reactions || {});
+  const nextR = JSON.stringify(next.message.reactions || {});
+  if (prevR !== nextR) return false;
+  // Poll votes comparison
+  if (prev.pollVotes !== next.pollVotes) return false;
+  return true;
+});
