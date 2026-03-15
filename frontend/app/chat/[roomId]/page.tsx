@@ -2153,6 +2153,33 @@ export default function RoomPage() {
                 }))}
                 onSendWidget={handleSendWidget}
                 onSendButtons={handleSendButtons}
+                onSendLocation={() => {
+                  if (!navigator.geolocation) {
+                    alert('Trình duyệt không hỗ trợ định vị');
+                    return;
+                  }
+                  navigator.geolocation.getCurrentPosition(
+                    async (pos) => {
+                      try {
+                        const msg = await matrixService.sendLocationMessage(
+                          roomId,
+                          pos.coords.latitude,
+                          pos.coords.longitude,
+                        );
+                        setMessages(prev => [...prev, msg]);
+                      } catch {
+                        alert('Không thể gửi vị trí');
+                      }
+                    },
+                    (err) => {
+                      if (err.code === 1) alert('Bạn đã từ chối quyền truy cập vị trí');
+                      else alert('Không thể lấy vị trí: ' + err.message);
+                    },
+                    { enableHighAccuracy: true, timeout: 10000 }
+                  );
+                }}
+                onToggleDisappearing={() => setShowDisappearingDialog(true)}
+                isDisappearingActive={!!disappearingTtl}
               />
             </div>
           </>

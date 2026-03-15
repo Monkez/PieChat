@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Paperclip, Smile, Mic, Square, FolderOpen, File, X, Loader2, Contact, BarChart3, AlarmClock, Reply, Pencil, Clock, AtSign, Code2, Zap } from 'lucide-react';
+import { Send, Paperclip, Mic, Square, FolderOpen, File, X, Loader2, Contact, BarChart3, AlarmClock, Reply, Pencil, Clock, AtSign, Code2, Zap, Plus, MapPin, Timer, Smile } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { StickerPicker } from './sticker-picker';
 import { createChartWidget, createTableWidget, createProgressWidget, createCodeWidget, createCustomWidget } from '@/lib/widget-sdk';
@@ -40,15 +40,20 @@ interface ChatInputProps {
   members?: MentionMember[];
   onSendWidget?: (widgetPayload: object) => void;
   onSendButtons?: (text: string, buttons: Array<{ id: string; label: string; action?: string; url?: string; style?: 'primary' | 'secondary' | 'danger' }>) => void;
+  onSendLocation?: () => void;
+  onToggleDisappearing?: () => void;
+  isDisappearingActive?: boolean;
 }
 
-export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoice, onSendContact, onSendSticker, onOpenPollDialog, onOpenReminderDialog, onTyping, replyEdit, onCancelReplyEdit, onEditMessage, onReplyMessage, placeholder, disabled, onScheduleMessage, members, onSendWidget, onSendButtons }: ChatInputProps) {
+export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoice, onSendContact, onSendSticker, onOpenPollDialog, onOpenReminderDialog, onTyping, replyEdit, onCancelReplyEdit, onEditMessage, onReplyMessage, placeholder, disabled, onScheduleMessage, members, onSendWidget, onSendButtons, onSendLocation, onToggleDisappearing, isDisappearingActive }: ChatInputProps) {
   const [message, setMessage] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const [isAttachMenuOpen, setIsAttachMenuOpen] = useState(false);
   const [isStickerOpen, setIsStickerOpen] = useState(false);
+  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
   const [isScheduleOpen, setIsScheduleOpen] = useState(false);
   const attachMenuRef = useRef<HTMLDivElement>(null);
 
@@ -77,11 +82,14 @@ export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoic
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
 
-  // Close attach menu on outside click
+  // Close attach menu and more menu on outside click
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (attachMenuRef.current && !attachMenuRef.current.contains(event.target as Node)) {
         setIsAttachMenuOpen(false);
+      }
+      if (moreMenuRef.current && !moreMenuRef.current.contains(event.target as Node)) {
+        setIsMoreMenuOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -716,27 +724,6 @@ export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoic
                 <Contact className="h-4 w-4" />
                 Gửi danh thiếp
               </button>
-              <button
-                onClick={() => { setIsAttachMenuOpen(false); onOpenPollDialog?.(); }}
-                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-zinc-700 hover:bg-sky-50 hover:text-sky-700 dark:text-zinc-200 dark:hover:bg-sky-900/20 dark:hover:text-sky-400 transition-colors"
-              >
-                <BarChart3 className="h-4 w-4" />
-                Tạo bình chọn
-              </button>
-              <button
-                onClick={() => { setIsAttachMenuOpen(false); onOpenReminderDialog?.(); }}
-                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-zinc-700 hover:bg-sky-50 hover:text-sky-700 dark:text-zinc-200 dark:hover:bg-sky-900/20 dark:hover:text-sky-400 transition-colors"
-              >
-                <AlarmClock className="h-4 w-4" />
-                Nhắc hẹn
-              </button>
-              <button
-                onClick={() => { setIsAttachMenuOpen(false); setIsScheduleOpen(true); }}
-                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-zinc-700 hover:bg-sky-50 hover:text-sky-700 dark:text-zinc-200 dark:hover:bg-sky-900/20 dark:hover:text-sky-400 transition-colors"
-              >
-                <Clock className="h-4 w-4" />
-                Hẹn giờ gửi
-              </button>
             </div>
           )}
 
@@ -859,20 +846,82 @@ export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoic
         )}
 
         <div className="flex shrink-0 items-center gap-0.5 self-end">
-          <div className="relative">
+          {/* More Menu (+) button */}
+          <div className="relative" ref={moreMenuRef}>
             <button
               type="button"
-              onClick={() => setIsStickerOpen(!isStickerOpen)}
+              onClick={() => { setIsMoreMenuOpen(!isMoreMenuOpen); setIsStickerOpen(false); }}
               className={cn(
-                "flex h-8 w-8 lg:h-7 lg:w-7 items-center justify-center rounded-full transition-colors",
-                isStickerOpen
-                  ? "bg-sky-50 text-sky-500 dark:bg-sky-900/20 dark:text-sky-400"
-                  : "text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
+                "flex h-8 w-8 lg:h-7 lg:w-7 items-center justify-center rounded-full transition-all",
+                isMoreMenuOpen
+                  ? "bg-sky-50 text-sky-500 dark:bg-sky-900/20 dark:text-sky-400 rotate-45"
+                  : isDisappearingActive
+                    ? "bg-amber-50 text-amber-500 dark:bg-amber-900/20 dark:text-amber-400"
+                    : "text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
               )}
-              title="Sticker"
+              title="Thêm"
             >
-              <Smile className="h-5 w-5 lg:h-4 lg:w-4" />
+              <Plus className="h-5 w-5 lg:h-4 lg:w-4 transition-transform" />
             </button>
+
+            {isMoreMenuOpen && (
+              <div className="absolute bottom-full right-0 mb-2 w-52 overflow-hidden rounded-2xl border border-zinc-200 bg-white p-1.5 shadow-2xl ring-1 ring-black/5 dark:border-zinc-700 dark:bg-zinc-900 animate-in fade-in slide-in-from-bottom-2 zoom-in-95 duration-200 z-50">
+                <button
+                  onClick={() => { setIsMoreMenuOpen(false); setIsStickerOpen(!isStickerOpen); }}
+                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-zinc-700 hover:bg-sky-50 hover:text-sky-700 dark:text-zinc-200 dark:hover:bg-sky-900/20 dark:hover:text-sky-400 transition-colors"
+                >
+                  <Smile className="h-4 w-4" />
+                  Sticker
+                </button>
+                <button
+                  onClick={() => { setIsMoreMenuOpen(false); onSendLocation?.(); }}
+                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-zinc-700 hover:bg-sky-50 hover:text-sky-700 dark:text-zinc-200 dark:hover:bg-sky-900/20 dark:hover:text-sky-400 transition-colors"
+                >
+                  <MapPin className="h-4 w-4" />
+                  Chia sẻ vị trí
+                </button>
+                <div className="my-1 h-px bg-zinc-100 dark:bg-zinc-800" />
+                <button
+                  onClick={() => { setIsMoreMenuOpen(false); onOpenPollDialog?.(); }}
+                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-zinc-700 hover:bg-sky-50 hover:text-sky-700 dark:text-zinc-200 dark:hover:bg-sky-900/20 dark:hover:text-sky-400 transition-colors"
+                >
+                  <BarChart3 className="h-4 w-4" />
+                  Bình chọn
+                </button>
+                <button
+                  onClick={() => { setIsMoreMenuOpen(false); onOpenReminderDialog?.(); }}
+                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-zinc-700 hover:bg-sky-50 hover:text-sky-700 dark:text-zinc-200 dark:hover:bg-sky-900/20 dark:hover:text-sky-400 transition-colors"
+                >
+                  <AlarmClock className="h-4 w-4" />
+                  Nhắc hẹn
+                </button>
+                <button
+                  onClick={() => { setIsMoreMenuOpen(false); setIsScheduleOpen(true); }}
+                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-zinc-700 hover:bg-sky-50 hover:text-sky-700 dark:text-zinc-200 dark:hover:bg-sky-900/20 dark:hover:text-sky-400 transition-colors"
+                >
+                  <Clock className="h-4 w-4" />
+                  Hẹn giờ gửi
+                </button>
+                <div className="my-1 h-px bg-zinc-100 dark:bg-zinc-800" />
+                <button
+                  onClick={() => { setIsMoreMenuOpen(false); onToggleDisappearing?.(); }}
+                  className={cn(
+                    "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
+                    isDisappearingActive
+                      ? "text-amber-600 bg-amber-50 dark:text-amber-400 dark:bg-amber-900/20"
+                      : "text-zinc-700 hover:bg-sky-50 hover:text-sky-700 dark:text-zinc-200 dark:hover:bg-sky-900/20 dark:hover:text-sky-400"
+                  )}
+                >
+                  <Timer className="h-4 w-4" />
+                  Tin nhắn tự hủy
+                  {isDisappearingActive && (
+                    <span className="ml-auto text-[10px] font-bold text-amber-500">BẬT</span>
+                  )}
+                </button>
+              </div>
+            )}
+
+            {/* Sticker Picker (opened from + menu) */}
             <StickerPicker
               isOpen={isStickerOpen}
               onClose={() => setIsStickerOpen(false)}
