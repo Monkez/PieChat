@@ -42,6 +42,7 @@ export default function RoomPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const userScrolledUpRef = useRef(false);
+  const clearedBeforeRef = useRef<number>(0);
   const prevMessageCountRef = useRef(0);
 
   const {
@@ -199,9 +200,11 @@ export default function RoomPage() {
     }
     try {
       const msgs = await matrixService.getMessages(roomId);
+      const cutoff = clearedBeforeRef.current;
       setMessages((prev) => {
         const localDrafts = prev.filter((item) => item.id.startsWith('temp-') && item.status !== 'sent');
-        return [...msgs, ...localDrafts].sort((a, b) => a.timestamp - b.timestamp);
+        const filteredMsgs = cutoff ? msgs.filter(m => m.timestamp > cutoff) : msgs;
+        return [...filteredMsgs, ...localDrafts].sort((a, b) => a.timestamp - b.timestamp);
       });
       // Sync poll votes from timeline
       const serverVotes = matrixService.getLastPollVotes();
@@ -267,6 +270,11 @@ export default function RoomPage() {
   }, [roomId, currentUser?.id, room]);
 
   useEffect(() => {
+    // Restore cleared-before timestamp for this room
+    try {
+      const saved = localStorage.getItem(`piechat_cleared_${roomId}`);
+      clearedBeforeRef.current = saved ? Number(saved) : 0;
+    } catch { clearedBeforeRef.current = 0; }
     setFirstLoadDone(false);
     void loadMessages().then(() => {
       // Seed existing message IDs so they don't trigger notifications
@@ -1469,6 +1477,9 @@ export default function RoomPage() {
                     onClick={() => {
                       setIsMenuOpen(false);
                       if (!confirm('Xóa toàn bộ lịch sử chat hiển thị? (Chỉ xóa trên thiết bị này)')) return;
+                      const now = Date.now();
+                      clearedBeforeRef.current = now;
+                      try { localStorage.setItem(`piechat_cleared_${roomId}`, String(now)); } catch {}
                       setMessages([]);
                     }}
                     className="flex w-full items-center gap-2 px-4 py-2 text-sm text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-900/20"
