@@ -2834,6 +2834,179 @@ class MatrixService {
     };
     return msg;
   }
+
+  // ─── Admin APIs (Dendrite) ────────────────────────────────
+  async isServerAdmin(): Promise<boolean> {
+    try {
+      const userId = this.getCurrentUserId();
+      if (!userId) return false;
+      const localpart = userId.split(':')[0].replace('@', '');
+      const res = await this.request<{ admin: boolean }>(
+        `/_dendrite/admin/isAdmin/${encodeURIComponent(localpart)}`,
+        { method: 'GET' },
+      );
+      return res.admin === true;
+    } catch {
+      // Fallback: try via /_synapse admin API format
+      try {
+        const userId = this.getCurrentUserId();
+        if (!userId) return false;
+        const res = await this.request<{ admin?: boolean }>(
+          `/_synapse/admin/v1/users/${encodeURIComponent(userId)}`,
+          { method: 'GET' },
+        );
+        return res.admin === true;
+      } catch {
+        return false;
+      }
+    }
+  }
+
+  async listAllUsers(): Promise<Array<{ user_id: string; display_name?: string; avatar_url?: string }>> {
+    try {
+      // Dendrite admin API
+      const res = await this.request<{ users?: Array<{ name: string; displayname?: string; avatar_url?: string }> }>(
+        '/_dendrite/admin/users',
+        { method: 'GET' },
+      );
+      return (res.users || []).map(u => ({
+        user_id: u.name,
+        display_name: u.displayname,
+        avatar_url: u.avatar_url,
+      }));
+    } catch {
+      // Fallback: user directory search
+      try {
+        const res = await this.request<{ results?: Array<{ user_id: string; display_name?: string; avatar_url?: string }> }>(
+          '/_matrix/client/v3/user_directory/search',
+          {
+            method: 'POST',
+            body: JSON.stringify({ search_term: '', limit: 500 }),
+          },
+        );
+        return res.results || [];
+      } catch {
+        return [];
+      }
+    }
+  }
+
+  async getServerStats(): Promise<{ totalUsers: number; totalRooms: number }> {
+    try {
+      const users = await this.listAllUsers();
+      const rooms = await this.request<{ joined_rooms: string[] }>(
+        '/_matrix/client/v3/joined_rooms',
+      );
+      return {
+        totalUsers: users.length,
+        totalRooms: rooms.joined_rooms?.length || 0,
+      };
+    } catch {
+      return { totalUsers: 0, totalRooms: 0 };
+    }
+  }
+
+  async sendSystemAnnouncement(
+    title: string,
+    body: string,
+    mode: 'notification' | 'room',
+    targetUserIds?: string[],
+  ): Promise<{ sent: number }> {
+    const users = targetUserIds || (await this.listAllUsers()).map(u => u.user_id);
+    const currentUserId = this.getCurrentUserId();
+    let sent = 0;
+
+    if (mode === 'room') {
+      // Create a room and invite all users
+      const roomRes = await this.request<{ room_id: string }>(
+        '/_matrix/client/v3/createRoom',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            name: `📢 ${title}`,
+            topic: body,
+            preset: 'private_chat',
+            visibility: 'private',
+            invite: users.filter(id => id !== currentUserId),
+            initial_state: [
+              {
+                type: 'io.piechat.group.meta',
+                state_key: '',
+                content: { kind: 'group', createdBy: currentUserId },
+              },
+            ],
+          }),
+        },
+      );
+      // Send announcement message
+      const txnId = secureId('ann');
+      await this.request(
+        `/_matrix/client/v3/rooms/${encodeURIComponent(roomRes.room_id)}/send/m.room.message/${txnId}`,
+        {
+          method: 'PUT',
+          body: JSON.stringify({
+            msgtype: 'm.text',
+            body: `📢 ${title}\n\n${body}`,
+            format: 'org.matrix.custom.html',
+            formatted_body: `<h3>📢 ${title}</h3><p>${body}</p>`,
+          }),
+        },
+      );
+      sent = users.length;
+    } else {
+      // Notification-only: send DM to each user
+      for (const uid of users) {
+        if (uid === currentUserId) continue;
+        try {
+          // Find or create DM room
+          const existingRooms = await this.getRooms().catch(() => []);
+          let dmRoom = existingRooms.find(r => r.type === 'dm' && r.members.some(m => m.id === uid));
+          if (!dmRoom) {
+            const res = await this.request<{ room_id: string }>(
+              '/_matrix/client/v3/createRoom',
+              {
+                method: 'POST',
+                body: JSON.stringify({
+                  preset: 'trusted_private_chat',
+                  visibility: 'private',
+                  is_direct: true,
+                  invite: [uid],
+                }),
+              },
+            );
+            dmRoom = { id: res.room_id } as any;
+          }
+          const txnId = secureId('sys');
+          await this.request(
+            `/_matrix/client/v3/rooms/${encodeURIComponent(dmRoom!.id)}/send/m.room.message/${txnId}`,
+            {
+              method: 'PUT',
+              body: JSON.stringify({
+                msgtype: 'm.text',
+                body: `📢 Thông báo hệ thống: ${title}\n\n${body}`,
+                'io.piechat.system_announcement': true,
+              }),
+            },
+          );
+          sent++;
+        } catch (err) {
+          console.error(`Failed to notify ${uid}:`, err);
+        }
+      }
+    }
+    return { sent };
+  }
+
+  async resetUserPassword(userId: string, newPassword: string): Promise<void> {
+    const localpart = userId.split(':')[0].replace('@', '');
+    await this.request(
+      `/_dendrite/admin/resetPassword/${encodeURIComponent(localpart)}`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ password: newPassword }),
+      },
+    );
+  }
 }
 
 export const matrixService = MatrixService.getInstance();

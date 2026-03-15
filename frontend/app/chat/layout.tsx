@@ -936,6 +936,20 @@ export default function ChatLayout({
 
         <div className="flex flex-col gap-4 mt-auto">
           <Link
+            href="/chat/notifications"
+            className="relative p-3 rounded-xl transition-all hover:bg-white/10"
+            title="Thông báo"
+          >
+            <Bell className="h-6 w-6" />
+          </Link>
+          <Link
+            href="/chat/admin"
+            className="p-3 rounded-xl transition-all hover:bg-white/10"
+            title="Admin Panel"
+          >
+            <Shield className="h-6 w-6" />
+          </Link>
+          <Link
             href="/settings"
             className="p-3 rounded-xl transition-all hover:bg-white/10"
             title={t(language, 'settingsTitle')}
