@@ -47,6 +47,16 @@
 - **Drag & Drop** — kéo thả file/folder vào chat, preview + tuỳ chọn caption
 - **Pin conversations** — ghim hội thoại quan trọng
 - **Tìm kiếm người dùng** theo số điện thoại
+- **Smart Copy** — nút sao chép thông minh theo nội dung: SĐT, OTP, số TK, URL, script
+- **Lên lịch gửi tin** — hẹn giờ gửi tin nhắn
+
+### 🧩 Widget Messages
+- **Paste script widget** — paste trực tiếp vào ô chat bằng tiền tố `//widget:{JSON}`
+- **Chart widget** — biểu đồ bar/line/area/pie/doughnut (SVG thuần, không cần CDN)
+- **Table widget** — bảng dữ liệu có sort, stripe
+- **Code widget** — highlight code với nút Copy
+- **Progress widget** — thanh tiến trình
+- **Custom widget** — HTML/CSS/JS tuỳ ý trong sandbox iframe
 
 ### 📞 Cuộc gọi (WebRTC)
 - **Gọi thoại** (Voice Call) — giao diện xanh lá

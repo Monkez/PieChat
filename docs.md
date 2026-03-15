@@ -16,6 +16,7 @@
 - [8. API Integration cho Website/Platform](#8-api-integration-cho-websiteplatform)
 - [9. Deployment & Scaling](#9-deployment--scaling)
 - [10. Security Analysis](#10-security-analysis)
+- [11. Widget Messages & Smart Features](#11-widget-messages--smart-features)
 
 ---
 
@@ -896,5 +897,192 @@ docker cp piechat-dendrite:/tmp/backup.tar.gz ./backup-$(date +%Y%m%d).tar.gz
 ---
 
 <p align="center">
-  <em>PieChat Technical Documentation v1.0 — Last updated: March 2026</em>
+  <em>PieChat Technical Documentation v1.1 — Last updated: March 2026</em>
 </p>
+
+---
+
+## 11. Widget Messages & Smart Features
+
+### 11.1 Widget Message System
+
+Widget messages cho phép gửi **giao diện tương tác** (chart, table, code, form...) dưới dạng tin nhắn chat. Widget chạy trong một **iframe sandbox** cô lập hoàn toàn — không truy cập được DOM cha, cookie, hay localStorage.
+
+#### Cách gửi Widget (người dùng cuối)
+
+Dán vào ô nhập chat với tiền tố `//widget:` theo sau là JSON:
+
+```
+//widget:{"type":"chart","title":"Doanh số Q1","chartType":"bar","labels":["T1","T2","T3","T4"],"datasets":[{"label":"Revenue","data":[12,18,15,22]}]}
+```
+
+Hệ thống sẽ:
+1. Nhận ra tiền tố → xóa text, hiện banner tím **"🧩 Widget: [tên]"**
+2. Khi nhấn ⚡ hoặc Enter → gọi `onSendWidget` → `matrixService.sendWidgetMessage()`
+3. Widget được serialize thành JSON string và lưu vào Matrix event field `io.piechat.widget`
+4. Khi render, parse string → `buildWidgetSrcdoc()` → `<iframe srcdoc=...>`
+
+#### Widget Format (Shorthand — khuyên dùng)
+
+| Type | Trường bắt buộc | Trường tùy chọn |
+|------|----------------|------------------|
+| `chart` | `labels[]`, `datasets[{label,data[]}]` | `chartType` (bar/line/area/pie/doughnut), `title`, `showLegend` |
+| `table` | `columns[]`, `rows[][]` | `title`, `sortable`, `striped` |
+| `code` | `code` | `language`, `title` |
+| `progress` | `value` | `max`, `label`, `color`, `showPercent`, `title` |
+| `custom` | `html` | `css`, `script`, `title`, `height`, `interactive` |
+
+> **Lưu ý:** Nếu payload chứa field `html` hoặc `script` thì hệ thống dùng trực tiếp (complete payload). Nếu không, SDK tự build từ shorthand.
+
+#### Ví dụ Shorthand
+
+**Bar Chart:**
+```
+//widget:{"type":"chart","title":"Doanh thu","chartType":"bar","labels":["T1","T2","T3","T4"],"datasets":[{"label":"2025","data":[12,18,15,22]}]}
+```
+
+**Table:**
+```
+//widget:{"type":"table","title":"Đơn hàng","columns":["Mã","Khách hàng","Tổng"],"rows":[["#001","Nguyễn A","5,000,000đ"],["#002","Trần B","3,200,000đ"]]}
+```
+
+**Code:**
+```
+//widget:{"type":"code","title":"Hello Python","language":"python","code":"print('Hello, PieChat!')"}
+```
+
+**Progress:**
+```
+//widget:{"type":"progress","title":"Tiến độ dự án","value":72,"max":100}
+```
+
+**Custom (Complete Payload — đã có html/script):**
+```
+//widget:{"type":"custom","title":"Dashboard","height":180,"html":"<div style='padding:16px'><h2>Hello!</h2></div>","css":"body{font-family:sans-serif}","script":"setTimeout(()=>window.parent.postMessage({type:'piechat-widget-resize',height:document.body.scrollHeight},'*'),100)"}
+```
+
+#### Widget từ Bot/Code (API)
+
+Bot hoặc backend có thể gửi widget dùng `sendWidgetMessage`:
+
+```typescript
+import { matrixService } from '@/lib/services/matrix-service';
+import { createChartWidget } from '@/lib/widget-sdk';
+
+const widget = createChartWidget({
+  type: 'bar',
+  title: 'Sales Q1',
+  labels: ['Jan', 'Feb', 'Mar'],
+  datasets: [{ label: 'Revenue', data: [100, 150, 120] }],
+});
+
+await matrixService.sendWidgetMessage(roomId, '📊 Sales Q1', widget);
+```
+
+Hoặc dùng Matrix API trực tiếp:
+
+```bash
+curl -X PUT \
+  'https://piechart.site/_matrix/client/v3/rooms/{roomId}/send/m.room.message/{txnId}' \
+  -H 'Authorization: Bearer {access_token}' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "msgtype": "m.text",
+    "body": "📊 My Chart",
+    "io.piechat.widget": "{\"type\":\"chart\",\"title\":\"Sales\",\"html\":\"...\",\"script\":\"...\"}"
+  }'
+```
+
+> ⚠️ **Quan trọng:** `io.piechat.widget` phải là **JSON string** (không phải nested object) để tránh lỗi `M_BAD_JSON` từ Dendrite/gomatrixserverlib.
+
+#### Widget Communication (postMessage)
+
+Widget trong iframe giao tiếp với app cha qua `window.parent.postMessage`:
+
+| Message type | Hướng | Payload | Tác dụng |
+|-------------|-------|---------|----------|
+| `piechat-widget-resize` | iframe → parent | `{ height: number }` | Điều chỉnh chiều cao iframe |
+| `piechat-widget-action` | iframe → parent | `{ action, data }` | Hành động (vd: copy code) |
+
+```javascript
+// Trong script của widget:
+window.parent.postMessage({
+  type: 'piechat-widget-resize',
+  height: document.body.scrollHeight
+}, '*');
+
+// Copy button:
+window.parent.postMessage({
+  type: 'piechat-widget-action',
+  action: 'copy',
+  data: 'text to copy'
+}, '*');
+```
+
+#### Content Security Policy (Sandbox)
+
+```
+default-src 'none';
+script-src 'unsafe-inline';
+style-src 'unsafe-inline';
+img-src data: blob:;
+```
+
+- **Không** truy cập được external URLs, APIs, hoặc network
+- **Không** truy cập được localStorage, cookies, parent DOM
+- **Chỉ** có thể dùng `postMessage` để giao tiếp
+
+---
+
+### 11.2 Smart Copy (Sao chép thông minh)
+
+Menu **`⋮`** bên cạnh tin nhắn (hover desktop) hoặc long-press sheet (mobile) hiển thị tùy chọn sao chép theo ngữ cảnh:
+
+#### Detection Logic
+
+```typescript
+// Số điện thoại VN
+/(?:\+84|0)[3-9]\d{8}\b/g
+
+// Số tài khoản ngân hàng (9-19 chữ số, khi không có SĐT)
+/\b\d{9,19}\b/g
+
+// OTP code (4-8 chữ số, không trùng trong SĐT)
+/\b\d{4,8}\b/g
+
+// URL
+/https?:\/\/[^\s,'\'"<>]+/g
+```
+
+#### Menu Options
+
+| Điều kiện | Label | Icon |
+|-----------|-------|------|
+| Text bình thường (m.text) | Sao chép văn bản | Copy |
+| Có SĐT VN | Sao chép số điện thoại | Phone (xanh lá) |
+| Có OTP 4-8 digit | Sao chép mã OTP | KeyRound (cam) |
+| Có số TK 9-19 digit (không có SĐT) | Sao chép số tài khoản | CreditCard (tím) |
+| Có URL | Sao chép liên kết | Link2 (xanh dương) |
+| Widget message | Sao chép mã script | Code2 (vàng) |
+
+#### Implementation Files
+
+- **Detection:** `frontend/components/chat/message-bubble.tsx` — `extractPhones()`, `extractBankAccounts()`, `extractOtps()`, `extractUrls()`
+- **UI:** Desktop 3-dot menu + mobile long-press bottom sheet
+- **Feedback:** Toast hiển thị `✓ Đã sao chép [loại]` trong 1.8 giây
+
+---
+
+### 11.3 Broadcast Message (Channel Leaders)
+
+Leader/Deputy của Channel có thể gửi thông báo đến **tất cả nhóm** trong kênh cùng lúc:
+
+```typescript
+await matrixService.broadcastToChannel(channelId, message, groupRoomIds);
+// Returns: number of groups successfully sent to
+```
+
+UI: Nút 📣 trong header chat → Modal nhập nội dung → Gửi đến N nhóm.
+
+---
+

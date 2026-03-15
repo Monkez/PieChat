@@ -4,6 +4,8 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, Paperclip, Smile, Mic, Square, FolderOpen, File, X, Loader2, Contact, BarChart3, AlarmClock, Reply, Pencil, Clock, AtSign, Code2, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { StickerPicker } from './sticker-picker';
+import { createChartWidget, createTableWidget, createProgressWidget, createCodeWidget, createCustomWidget } from '@/lib/widget-sdk';
+import type { WidgetPayload } from '@/lib/widget-sdk';
 
 export interface MentionMember {
   id: string;       // @user:domain
@@ -99,14 +101,80 @@ export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoic
    */
   const WIDGET_PREFIX = '//widget:';
 
-  const tryParseWidgetPaste = (text: string): { valid: boolean; payload?: object; title?: string } => {
+  const tryParseWidgetPaste = (text: string): { valid: boolean; payload?: WidgetPayload; title?: string } => {
     const trimmed = text.trim();
     if (!trimmed.startsWith(WIDGET_PREFIX)) return { valid: false };
     const jsonStr = trimmed.slice(WIDGET_PREFIX.length).trim();
     try {
-      const parsed = JSON.parse(jsonStr);
-      if (!parsed || typeof parsed !== 'object' || !('type' in parsed)) return { valid: false };
-      return { valid: true, payload: parsed, title: (parsed as any).title || (parsed as any).type || 'Widget' };
+      const raw = JSON.parse(jsonStr) as Record<string, any>;
+      if (!raw || typeof raw !== 'object' || !('type' in raw)) return { valid: false };
+
+      let payload: WidgetPayload;
+
+      // If payload already has html/script, it's a complete widget — use directly
+      if (raw.html || raw.script) {
+        payload = raw as WidgetPayload;
+      } else {
+        // Build full payload using SDK helpers based on type
+        switch (raw.type) {
+          case 'chart': {
+            // Support shorthand: {type:'chart', chartType:'bar', labels:[...], datasets:[...], title?}
+            const labels: string[] = raw.labels || raw.data?.labels || [];
+            const rawDs = raw.datasets || raw.data?.datasets || [];
+            const datasets = rawDs.map((d: any) => ({
+              label: d.label || '',
+              data: d.data || [],
+              color: d.color || d.backgroundColor,
+            }));
+            payload = createChartWidget({
+              type: raw.chartType || 'bar',
+              labels,
+              datasets,
+              title: raw.title,
+              showLegend: raw.showLegend !== false,
+            });
+            if (raw.title) payload.title = raw.title;
+            break;
+          }
+          case 'table': {
+            // Support shorthand: {type:'table', columns:['A','B'], rows:[['v1','v2']], title?}
+            const rawCols: any[] = raw.columns || [];
+            const cols = rawCols.map((c: any) =>
+              typeof c === 'string' ? { key: c, label: c } : c
+            );
+            const rawRows: any[][] = raw.rows || [];
+            const rows = rawRows.map((r: any[]) => {
+              const obj: Record<string, string | number> = {};
+              cols.forEach((c, i) => { obj[c.key] = r[i] ?? ''; });
+              return obj;
+            });
+            payload = createTableWidget({ columns: cols, rows, title: raw.title, sortable: raw.sortable !== false, striped: raw.striped !== false });
+            break;
+          }
+          case 'progress': {
+            payload = createProgressWidget({
+              value: Number(raw.value ?? 0),
+              max: Number(raw.max ?? 100),
+              label: raw.label || raw.title,
+              color: raw.color,
+              showPercent: raw.showPercent !== false,
+            });
+            if (raw.title) payload.title = raw.title;
+            break;
+          }
+          case 'code': {
+            payload = createCodeWidget(raw.code || '', raw.language || 'javascript', raw.title);
+            break;
+          }
+          case 'custom':
+          default: {
+            payload = createCustomWidget(raw.html || '', raw.css, raw.script, { title: raw.title, height: raw.height, interactive: raw.interactive });
+            break;
+          }
+        }
+      }
+
+      return { valid: true, payload, title: payload.title || raw.type || 'Widget' };
     } catch {
       return { valid: false };
     }
