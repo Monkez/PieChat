@@ -932,6 +932,14 @@ Hệ thống sẽ:
 | `progress` | `value` | `max`, `label`, `color`, `showPercent`, `title` |
 | `custom` | `html` | `css`, `script`, `title`, `height`, `interactive` |
 
+**Trường chung** (áp dụng cho mọi type):
+
+| Trường | Kiểu | Mô tả | Ví dụ |
+|--------|------|-------|-------|
+| `width` | `number` hoặc `string` | Chiều rộng widget. Số → px, chuỗi → CSS value | `500`, `"80%"`, `"50%"` |
+| `height` | `number` | Chiều cao widget (px) | `200` |
+| `title` | `string` | Tiêu đề hiển thị trên header | `"Doanh thu Q1"` |
+
 > **Lưu ý:** Nếu payload chứa field `html` hoặc `script` thì hệ thống dùng trực tiếp (complete payload). Nếu không, SDK tự build từ shorthand.
 
 #### Ví dụ Shorthand
@@ -954,6 +962,16 @@ Hệ thống sẽ:
 **Progress:**
 ```
 //widget:{"type":"progress","title":"Tiến độ dự án","value":72,"max":100}
+```
+
+**Chart với width 50%:**
+```
+//widget:{"type":"chart","title":"50% Wide","chartType":"bar","width":"50%","labels":["A","B","C"],"datasets":[{"label":"Q1","data":[10,20,15]}]}
+```
+
+**Progress với width 300px:**
+```
+//widget:{"type":"progress","title":"Sprint 7","width":300,"value":87,"max":100}
 ```
 
 **Custom (Complete Payload — đã có html/script):**

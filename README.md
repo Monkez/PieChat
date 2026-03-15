@@ -57,6 +57,7 @@
 - **Code widget** — highlight code với nút Copy
 - **Progress widget** — thanh tiến trình
 - **Custom widget** — HTML/CSS/JS tuỳ ý trong sandbox iframe
+- **Tuỳ chỉnh kích thước** — `width: 500` (px) hoặc `width: "80%"` (phần trăm)
 
 ### 📞 Cuộc gọi (WebRTC)
 - **Gọi thoại** (Voice Call) — giao diện xanh lá
