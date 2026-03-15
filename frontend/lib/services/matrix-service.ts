@@ -2649,6 +2649,47 @@ class MatrixService {
     }
   }
 
+  // ─── Pinned Messages ─────────────────────────────────────
+  async getPinnedEventIds(roomId: string): Promise<string[]> {
+    try {
+      const res = await this.request<{ pinned?: string[] }>(
+        `/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/state/m.room.pinned_events/`,
+        { method: 'GET' },
+      );
+      return res.pinned || [];
+    } catch {
+      return [];
+    }
+  }
+
+  async pinMessage(roomId: string, eventId: string): Promise<string[]> {
+    const current = await this.getPinnedEventIds(roomId);
+    if (current.includes(eventId)) return current;
+    if (current.length >= 3) throw new Error('PIN_LIMIT');
+    const newPinned = [...current, eventId];
+    await this.request(
+      `/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/state/m.room.pinned_events/`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ pinned: newPinned }),
+      },
+    );
+    return newPinned;
+  }
+
+  async unpinMessage(roomId: string, eventId: string): Promise<string[]> {
+    const current = await this.getPinnedEventIds(roomId);
+    const newPinned = current.filter(id => id !== eventId);
+    await this.request(
+      `/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/state/m.room.pinned_events/`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ pinned: newPinned }),
+      },
+    );
+    return newPinned;
+  }
+
   // ─── Inline Buttons (for Bot/AI assistant) ───────────
   async sendMessageWithButtons(
     roomId: string,

@@ -3,7 +3,7 @@
 import { useState, useRef, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import Image from 'next/image';
-import { MoreVertical, Reply, Forward, Info, Trash2, Repeat, Download, Play, Pause, FileIcon, Copy, Pin, Pencil, Phone, CreditCard, KeyRound, Link2, Code2 } from 'lucide-react';
+import { MoreVertical, Reply, Forward, Info, Trash2, Repeat, Download, Play, Pause, FileIcon, Copy, Pin, PinOff, Pencil, Phone, CreditCard, KeyRound, Link2, Code2 } from 'lucide-react';
 import { Message } from '@/lib/services/matrix-service';
 import { cn } from '@/lib/utils';
 import { Avatar } from '@/components/ui/avatar';
@@ -38,6 +38,9 @@ interface MessageBubbleProps {
   onWidgetAction?: (msgId: string, action: string, data: unknown) => void;
   onAvatarClick?: (userId: string) => void;
   senderRole?: 'leader' | 'deputy' | 'member' | null;
+  isPinned?: boolean;
+  onPinMessage?: (msgId: string) => void;
+  onUnpinMessage?: (msgId: string) => void;
 }
 
 const REACTION_ICONS: Record<string, string> = {
@@ -422,6 +425,9 @@ export function MessageBubble({
   onWidgetAction,
   onAvatarClick,
   senderRole,
+  isPinned,
+  onPinMessage,
+  onUnpinMessage,
 }: MessageBubbleProps) {
   const { language } = useUiStore();
   const [showAbove, setShowAbove] = useState(false);
@@ -882,15 +888,29 @@ export function MessageBubble({
               <span className="text-[11px] font-medium text-zinc-600 dark:text-zinc-400">{t(language, 'msgDetails' as any)}</span>
             </button>
 
-            <button
-              onClick={() => { onMenuAction('pin', msg); closeLongPress(); }}
-              className="flex flex-col items-center gap-1.5 rounded-xl py-3 active:bg-zinc-100 dark:active:bg-zinc-800 transition-colors"
-            >
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-100 dark:bg-orange-900/30">
-                <Pin className="h-5 w-5 text-orange-600 dark:text-orange-400" />
-              </div>
-              <span className="text-[11px] font-medium text-zinc-600 dark:text-zinc-400">Ghim</span>
-            </button>
+            {!msg.id.startsWith('temp-') && (
+              isPinned ? (
+                <button
+                  onClick={() => { onUnpinMessage?.(msg.id); closeLongPress(); }}
+                  className="flex flex-col items-center gap-1.5 rounded-xl py-3 active:bg-zinc-100 dark:active:bg-zinc-800 transition-colors"
+                >
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-100 dark:bg-orange-900/30">
+                    <PinOff className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                  </div>
+                  <span className="text-[11px] font-medium text-zinc-600 dark:text-zinc-400">Bỏ ghim</span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => { onPinMessage?.(msg.id); closeLongPress(); }}
+                  className="flex flex-col items-center gap-1.5 rounded-xl py-3 active:bg-zinc-100 dark:active:bg-zinc-800 transition-colors"
+                >
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 dark:bg-amber-900/30">
+                    <Pin className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                  </div>
+                  <span className="text-[11px] font-medium text-zinc-600 dark:text-zinc-400">Ghim</span>
+                </button>
+              )
+            )}
 
             <button
               onClick={() => { onMenuAction('delete', msg); closeLongPress(); }}
@@ -1081,6 +1101,18 @@ export function MessageBubble({
                     )}
                   </>
                 )}
+                {/* Pin / Unpin */}
+                {!msg.id.startsWith('temp-') && (
+                  isPinned ? (
+                    <button onClick={() => { onUnpinMessage?.(msg.id); setActiveMenuId(null); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-zinc-700 hover:bg-orange-50 hover:text-orange-700 dark:text-zinc-200 dark:hover:bg-orange-900/20 transition-all text-nowrap">
+                      <PinOff className="h-4 w-4 text-orange-500" /> Bỏ ghim
+                    </button>
+                  ) : (
+                    <button onClick={() => { onPinMessage?.(msg.id); setActiveMenuId(null); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-zinc-700 hover:bg-amber-50 hover:text-amber-700 dark:text-zinc-200 dark:hover:bg-amber-900/20 transition-all text-nowrap">
+                      <Pin className="h-4 w-4 text-amber-500" /> Ghim tin nhắn
+                    </button>
+                  )
+                )}
                 <div className="my-1.5 h-px bg-zinc-100 dark:bg-zinc-700/50" />
                 <button onClick={() => { onMenuAction('delete', msg); setActiveMenuId(null); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-900/20 transition-all text-nowrap">
                   <Trash2 className="h-4 w-4" /> {t(language, 'msgDelete' as any) || 'Delete'}
@@ -1232,6 +1264,9 @@ export function MessageBubble({
             isMe ? "text-sky-500/70 dark:text-sky-400 justify-end" : "text-zinc-400 justify-end"
           )}
         >
+          {isPinned && (
+            <Pin className="h-3 w-3 text-amber-500 dark:text-amber-400" />
+          )}
           <span>{new Date(msg.timestamp).toLocaleString([], { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
           {msg.edited && (
             <span className="italic opacity-70">đã sửa</span>

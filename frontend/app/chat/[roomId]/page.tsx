@@ -78,6 +78,7 @@ export default function RoomPage() {
   const [forwardSearch, setForwardSearch] = useState('');
   const [forwardTargetChannel, setForwardTargetChannel] = useState<string | null>(null);
   const [forwardSelectedMembers, setForwardSelectedMembers] = useState<Set<string>>(new Set());
+  const [pinnedMessageIds, setPinnedMessageIds] = useState<string[]>([]);
 
   // Enable notification checker
   useChatNotifications();
@@ -267,6 +268,8 @@ export default function RoomPage() {
         return prev;
       });
     }).finally(() => setFirstLoadDone(true));
+    // Load pinned messages
+    matrixService.getPinnedEventIds(roomId).then(ids => setPinnedMessageIds(ids)).catch(() => {});
     const timer = setInterval(() => {
       void loadMessages(true);
     }, 2500);
@@ -693,6 +696,29 @@ export default function RoomPage() {
     } catch (err) {
       console.error('Buttons send failed:', err);
       setMessages(prev => prev.map(item => item.id === tempId ? { ...item, status: 'failed' } : item));
+    }
+  };
+
+  // ─── Pin Message Handlers ─────────────────────────────────
+  const handlePinMessage = async (msgId: string) => {
+    try {
+      const newPinned = await matrixService.pinMessage(roomId, msgId);
+      setPinnedMessageIds(newPinned);
+    } catch (err: any) {
+      if (err?.message === 'PIN_LIMIT') {
+        alert('Đã đạt giới hạn 3 tin nhắn ghim. Bỏ ghim một tin trước khi ghim thêm.');
+      } else {
+        console.error('Pin failed:', err);
+      }
+    }
+  };
+
+  const handleUnpinMessage = async (msgId: string) => {
+    try {
+      const newPinned = await matrixService.unpinMessage(roomId, msgId);
+      setPinnedMessageIds(newPinned);
+    } catch (err) {
+      console.error('Unpin failed:', err);
     }
   };
 
@@ -1726,6 +1752,85 @@ export default function RoomPage() {
           </div>
         ) : (
           <>
+            {/* Pinned Messages Banner */}
+            {pinnedMessageIds.length > 0 && (() => {
+              const lastPinnedId = pinnedMessageIds[pinnedMessageIds.length - 1];
+              const lastPinnedMsg = messages.find(m => m.id === lastPinnedId);
+              const previewText = lastPinnedMsg
+                ? (lastPinnedMsg.widget ? `🧩 Widget: ${lastPinnedMsg.widget.title || 'Widget'}` : lastPinnedMsg.content)
+                : '(tin nhắn đã ghim)';
+              return (
+                <div className="border-b border-amber-200/60 dark:border-amber-800/30 bg-amber-50/80 dark:bg-amber-950/20 px-3 py-2 lg:px-4">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-200 dark:bg-amber-800/40">
+                      <svg className="h-3 w-3 text-amber-600 dark:text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 17v5" />
+                        <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V5a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2z" />
+                      </svg>
+                    </div>
+                    <button
+                      onClick={() => {
+                        const el = document.getElementById(`msg-${lastPinnedId}`);
+                        if (el) {
+                          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                          el.classList.add('ring-2', 'ring-amber-400', 'ring-offset-1');
+                          setTimeout(() => el.classList.remove('ring-2', 'ring-amber-400', 'ring-offset-1'), 2000);
+                        }
+                      }}
+                      className="flex-1 min-w-0 text-left"
+                    >
+                      <p className="text-[11px] font-bold text-amber-600 dark:text-amber-400">
+                        📌 {pinnedMessageIds.length} tin nhắn đã ghim
+                      </p>
+                      <p className="text-xs text-zinc-600 dark:text-zinc-400 truncate">{previewText}</p>
+                    </button>
+                    {pinnedMessageIds.length > 1 && (
+                      <details className="relative">
+                        <summary className="cursor-pointer text-[10px] font-semibold text-amber-600 dark:text-amber-400 hover:underline select-none">
+                          Xem tất cả
+                        </summary>
+                        <div className="absolute right-0 top-full z-50 mt-1 w-72 rounded-xl border border-zinc-200 bg-white p-2 shadow-xl dark:border-zinc-700 dark:bg-zinc-900 space-y-1">
+                          {pinnedMessageIds.map(pid => {
+                            const pmsg = messages.find(m => m.id === pid);
+                            const pText = pmsg
+                              ? (pmsg.widget ? `🧩 ${pmsg.widget.title || 'Widget'}` : pmsg.content)
+                              : '(tin nhắn)';
+                            return (
+                              <div key={pid} className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
+                                <button
+                                  onClick={() => {
+                                    const el = document.getElementById(`msg-${pid}`);
+                                    if (el) {
+                                      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                      el.classList.add('ring-2', 'ring-amber-400', 'ring-offset-1');
+                                      setTimeout(() => el.classList.remove('ring-2', 'ring-amber-400', 'ring-offset-1'), 2000);
+                                    }
+                                  }}
+                                  className="flex-1 min-w-0 text-left text-xs text-zinc-700 dark:text-zinc-300 truncate"
+                                >
+                                  {pText}
+                                </button>
+                                <button
+                                  onClick={() => handleUnpinMessage(pid)}
+                                  className="shrink-0 text-zinc-400 hover:text-rose-500 transition-colors"
+                                  title="Bỏ ghim"
+                                >
+                                  <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="m2 2 20 20" />
+                                    <path d="M12 17v5" />
+                                    <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V5a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2z" />
+                                  </svg>
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </details>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
             <div ref={chatContainerRef} className="flex-1 space-y-3 lg:space-y-3 overflow-y-auto bg-sky-50/50 px-1 py-1 lg:p-4 dark:bg-black/90 scrollbar-thin scrollbar-thumb-zinc-200 dark:scrollbar-thumb-zinc-800">
               {!firstLoadDone && (
                 <div className="space-y-4 p-4">
@@ -1755,7 +1860,7 @@ export default function RoomPage() {
                 const showDateSeparator = !prevMsg || new Date(msg.timestamp).toDateString() !== new Date(prevMsg.timestamp).toDateString();
 
                 return (
-                  <div key={msg.id} data-msg-id={msg.id} className="flex flex-col w-full">
+                  <div key={msg.id} id={`msg-${msg.id}`} data-msg-id={msg.id} className="flex flex-col w-full">
                     {showDateSeparator && (
                       <div className="my-6 flex items-center justify-center">
                         <span className="rounded-full bg-zinc-100/80 border border-zinc-200/50 px-4 py-1 text-[11px] font-medium text-zinc-500 shadow-sm backdrop-blur dark:bg-zinc-800/80 dark:border-zinc-700/50 dark:text-zinc-400">
@@ -1813,6 +1918,9 @@ export default function RoomPage() {
                       }}
                       onAvatarClick={(userId) => setProfileUserId(userId)}
                       senderRole={senderRole}
+                      isPinned={pinnedMessageIds.includes(msg.id)}
+                      onPinMessage={handlePinMessage}
+                      onUnpinMessage={handleUnpinMessage}
                     />
                   </div>
                 );
