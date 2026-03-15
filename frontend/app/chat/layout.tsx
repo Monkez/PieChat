@@ -1226,8 +1226,12 @@ export default function ChatLayout({
                     )}
                   >
                     <div className="relative h-14 w-14 lg:h-12 lg:w-12 shrink-0">
-                      <div className="flex h-full w-full items-center justify-center rounded-full bg-sky-100 text-sky-700 dark:bg-sky-900/30 font-bold text-xl lg:text-lg">
-                        {room.name.charAt(0).toUpperCase()}
+                      <div className="flex h-full w-full items-center justify-center rounded-full bg-sky-100 text-sky-700 dark:bg-sky-900/30 font-bold text-xl lg:text-lg overflow-hidden">
+                        {(() => {
+                          const imgUrl = room.avatarUrl || (room.type === 'dm' ? room.members.find(m => m.id !== currentUser?.id)?.avatarUrl : undefined);
+                          if (imgUrl) return <img src={imgUrl} alt="" className="h-full w-full object-cover" />;
+                          return room.name.charAt(0).toUpperCase();
+                        })()}
                       </div>
                       {room.type === 'dm' ? (
                         (() => {

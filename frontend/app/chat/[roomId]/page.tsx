@@ -4,7 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Send, Paperclip, MoreVertical, Phone, Video, Search, UserPlus, Crown, ShieldCheck, Trash2, Users, GripVertical, Shield, MessageSquare, Plus, ArrowLeft, FolderOpen, X, Check, BellOff, Bell, LogOut, Ban, Pin, Copy, Download, Eraser } from 'lucide-react';
+import { Send, Paperclip, MoreVertical, Phone, Video, Search, UserPlus, Crown, ShieldCheck, Trash2, Users, GripVertical, Shield, MessageSquare, Plus, ArrowLeft, FolderOpen, X, Check, BellOff, Bell, LogOut, Ban, Pin, Copy, Download, Eraser, ImageIcon, Wallpaper } from 'lucide-react';
 import { MessageBubble } from '@/components/chat/message-bubble';
 import { ChatInput, type ReplyEditState } from '@/components/chat/chat-input';
 import { MediaGallery } from '@/components/chat/media-gallery';
@@ -79,6 +79,9 @@ export default function RoomPage() {
   const [forwardTargetChannel, setForwardTargetChannel] = useState<string | null>(null);
   const [forwardSelectedMembers, setForwardSelectedMembers] = useState<Set<string>>(new Set());
   const [pinnedMessageIds, setPinnedMessageIds] = useState<string[]>([]);
+  const [chatBackground, setChatBackground] = useState<string | null>(null);
+  const roomAvatarInputRef = useRef<HTMLInputElement>(null);
+  const chatBgInputRef = useRef<HTMLInputElement>(null);
 
   // Enable notification checker
   useChatNotifications();
@@ -270,6 +273,8 @@ export default function RoomPage() {
     }).finally(() => setFirstLoadDone(true));
     // Load pinned messages
     matrixService.getPinnedEventIds(roomId).then(ids => setPinnedMessageIds(ids)).catch(() => {});
+    // Load chat background
+    matrixService.getChatBackground(roomId).then(url => setChatBackground(url)).catch(() => {});
     const timer = setInterval(() => {
       void loadMessages(true);
     }, 2500);
@@ -1347,6 +1352,39 @@ export default function RoomPage() {
                     <Download className="h-4 w-4" />
                     Xuất lịch sử chat
                   </button>
+                  {/* Room Avatar (channel/group only) */}
+                  {room && room.type !== 'dm' && (
+                    <button
+                      onClick={() => { setIsMenuOpen(false); roomAvatarInputRef.current?.click(); }}
+                      className="flex w-full items-center gap-2 px-4 py-2 text-sm text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                    >
+                      <ImageIcon className="h-4 w-4" />
+                      Đổi ảnh đại diện phòng
+                    </button>
+                  )}
+                  {/* Chat Background */}
+                  <button
+                    onClick={() => { setIsMenuOpen(false); chatBgInputRef.current?.click(); }}
+                    className="flex w-full items-center gap-2 px-4 py-2 text-sm text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                  >
+                    <Wallpaper className="h-4 w-4" />
+                    Đặt hình nền chat
+                  </button>
+                  {chatBackground && (
+                    <button
+                      onClick={async () => {
+                        setIsMenuOpen(false);
+                        try {
+                          await matrixService.setChatBackground(roomId, null);
+                          setChatBackground(null);
+                        } catch (err) { console.error('Clear background failed:', err); }
+                      }}
+                      className="flex w-full items-center gap-2 px-4 py-2 text-sm text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-900/20"
+                    >
+                      <Eraser className="h-4 w-4" />
+                      Xóa hình nền
+                    </button>
+                  )}
                   {/* Clear Chat History */}
                   <button
                     onClick={() => {
@@ -1784,7 +1822,7 @@ export default function RoomPage() {
                       </p>
                       <p className="text-xs text-zinc-600 dark:text-zinc-400 truncate">{previewText}</p>
                     </button>
-                    {pinnedMessageIds.length > 1 && (
+                    {pinnedMessageIds.length > 1 ? (
                       <details className="relative">
                         <summary className="cursor-pointer text-[10px] font-semibold text-amber-600 dark:text-amber-400 hover:underline select-none">
                           Xem tất cả
@@ -1826,12 +1864,31 @@ export default function RoomPage() {
                           })}
                         </div>
                       </details>
+                    ) : (
+                      <button
+                        onClick={() => handleUnpinMessage(lastPinnedId)}
+                        className="shrink-0 flex h-5 w-5 items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-200 hover:text-rose-500 dark:hover:bg-zinc-700 transition-colors"
+                        title="Bỏ ghim"
+                      >
+                        <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M18 6 6 18" /><path d="m6 6 12 12" />
+                        </svg>
+                      </button>
                     )}
                   </div>
                 </div>
               );
             })()}
-            <div ref={chatContainerRef} className="flex-1 space-y-3 lg:space-y-3 overflow-y-auto bg-sky-50/50 px-1 py-1 lg:p-4 dark:bg-black/90 scrollbar-thin scrollbar-thumb-zinc-200 dark:scrollbar-thumb-zinc-800">
+            <div
+              ref={chatContainerRef}
+              className="flex-1 space-y-3 lg:space-y-3 overflow-y-auto bg-sky-50/50 px-1 py-1 lg:p-4 dark:bg-black/90 scrollbar-thin scrollbar-thumb-zinc-200 dark:scrollbar-thumb-zinc-800"
+              style={chatBackground ? {
+                backgroundImage: `url(${chatBackground})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                backgroundAttachment: 'local',
+              } : undefined}
+            >
               {!firstLoadDone && (
                 <div className="space-y-4 p-4">
                   {[1, 2, 3].map((i) => (
@@ -2323,25 +2380,37 @@ export default function RoomPage() {
       {profileUserId && (() => {
         const profileMember = room?.members.find(m => m.id === profileUserId);
         const isCurrentUser = profileUserId === currentUser?.id;
+        const memberRole = room?.type === 'channel'
+          ? room.channelRoles[profileUserId]
+          : room?.groupRoles[profileUserId];
+        const roleLabel = memberRole === 'leader' ? '👑 Trưởng nhóm'
+          : memberRole === 'deputy' ? '🛡️ Phó nhóm' : null;
         return (
           <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setProfileUserId(null)}>
-            <div className="w-[340px] rounded-2xl bg-white dark:bg-zinc-900 shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="w-[360px] rounded-2xl bg-white dark:bg-zinc-900 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
               {/* Header gradient */}
-              <div className="h-24 bg-gradient-to-br from-sky-500 via-violet-500 to-fuchsia-500 relative">
-                <button onClick={() => setProfileUserId(null)} className="absolute top-3 right-3 rounded-full bg-black/30 p-1.5 text-white hover:bg-black/50">
+              <div className="h-28 bg-gradient-to-br from-sky-500 via-violet-500 to-fuchsia-500 relative">
+                <button onClick={() => setProfileUserId(null)} className="absolute top-3 right-3 rounded-full bg-black/30 p-1.5 text-white hover:bg-black/50 transition-colors">
                   <X className="h-4 w-4" />
                 </button>
               </div>
-              {/* Avatar */}
-              <div className="flex justify-center -mt-12">
-                <div className="h-24 w-24 rounded-full overflow-hidden bg-gradient-to-br from-sky-400 to-violet-500 ring-4 ring-white dark:ring-zinc-900 shadow-xl flex items-center justify-center">
-                  {profileMember?.avatarUrl ? (
-                    <img src={profileMember.avatarUrl} alt="" className="h-full w-full object-cover" />
-                  ) : (
-                    <span className="text-white text-3xl font-bold">
-                      {(profileMember?.displayName || profileMember?.username || '?').charAt(0).toUpperCase()}
-                    </span>
-                  )}
+              {/* Avatar with online indicator */}
+              <div className="flex justify-center -mt-14">
+                <div className="relative">
+                  <div className="h-28 w-28 rounded-full overflow-hidden bg-gradient-to-br from-sky-400 to-violet-500 ring-4 ring-white dark:ring-zinc-900 shadow-xl flex items-center justify-center">
+                    {profileMember?.avatarUrl ? (
+                      <img src={profileMember.avatarUrl} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <span className="text-white text-4xl font-bold">
+                        {(profileMember?.displayName || profileMember?.username || '?').charAt(0).toUpperCase()}
+                      </span>
+                    )}
+                  </div>
+                  {/* Online status dot */}
+                  <span className={`absolute bottom-1 right-1 h-4 w-4 rounded-full border-2 border-white dark:border-zinc-900 ${
+                    profileMember?.status === 'online' ? 'bg-emerald-500' :
+                    profileMember?.status === 'away' ? 'bg-amber-400' : 'bg-zinc-400'
+                  }`} />
                 </div>
               </div>
               {/* Info */}
@@ -2349,7 +2418,21 @@ export default function RoomPage() {
                 <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">
                   {profileMember?.displayName || profileMember?.username || profileUserId}
                 </h3>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400 font-mono mt-1">{profileUserId}</p>
+                {profileMember?.username && (
+                  <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">@{profileMember.username}</p>
+                )}
+                <p className="text-[11px] text-zinc-400 dark:text-zinc-500 font-mono mt-1 select-all">{profileUserId}</p>
+                {/* Role badge */}
+                {roleLabel && (
+                  <span className="inline-block mt-2 rounded-full bg-amber-100 dark:bg-amber-900/30 px-3 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
+                    {roleLabel}
+                  </span>
+                )}
+                {/* Status */}
+                <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+                  {profileMember?.status === 'online' ? '🟢 Đang hoạt động' :
+                   profileMember?.status === 'away' ? '🟡 Vắng mặt' : '⚫ Ngoại tuyến'}
+                </p>
               </div>
               {/* Actions */}
               {!isCurrentUser && (
@@ -2366,10 +2449,17 @@ export default function RoomPage() {
                   </button>
                   <button
                     onClick={() => { setProfileUserId(null); }}
-                    className="flex items-center justify-center gap-2 rounded-xl border border-zinc-200 dark:border-zinc-700 py-2.5 px-4 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+                    className="flex items-center justify-center gap-2 rounded-xl border border-zinc-200 dark:border-zinc-700 py-2.5 px-3 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+                    title="Gọi thoại"
                   >
                     <Phone className="h-4 w-4" />
-                    Gọi
+                  </button>
+                  <button
+                    onClick={() => { setProfileUserId(null); }}
+                    className="flex items-center justify-center gap-2 rounded-xl border border-zinc-200 dark:border-zinc-700 py-2.5 px-3 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+                    title="Gọi video"
+                  >
+                    <Video className="h-4 w-4" />
                   </button>
                 </div>
               )}
@@ -2502,6 +2592,37 @@ export default function RoomPage() {
           </div>
         </div>
       )}
+      {/* Hidden file inputs for room avatar and chat background */}
+      <input
+        ref={roomAvatarInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          try {
+            await matrixService.setRoomAvatar(roomId, file);
+            await fetchRooms();
+          } catch (err) { console.error('Set room avatar failed:', err); }
+          e.target.value = '';
+        }}
+      />
+      <input
+        ref={chatBgInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          try {
+            const url = await matrixService.setChatBackground(roomId, file);
+            setChatBackground(url);
+          } catch (err) { console.error('Set background failed:', err); }
+          e.target.value = '';
+        }}
+      />
     </div >
   );
 }

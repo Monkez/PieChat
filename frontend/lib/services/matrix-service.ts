@@ -37,6 +37,7 @@ export interface Room {
     status: 'pending' | 'accepted' | 'rejected';
     requester: string;
   };
+  avatarUrl?: string;
 }
 
 export interface Message {
@@ -795,6 +796,7 @@ class MatrixService {
         const roleState = stateEvents.find((event) => event.type === 'io.piechat.roles');
         const friendshipState = stateEvents.find((event) => event.type === 'io.piechat.friendship');
         const assistantMetaState = stateEvents.find((event) => event.type === 'io.piechat.assistant.meta');
+        const roomAvatarState = stateEvents.find((event) => event.type === 'm.room.avatar');
         const memberStateEvents = stateEvents.filter((event) => event.type === 'm.room.member') || [];
 
         const activeMembers = memberStateEvents.filter((event) => {
@@ -986,7 +988,12 @@ class MatrixService {
           callInvite,
           lastCallStatus,
           restrictSpeaking: Boolean(groupMeta?.restrictSpeaking || channelMeta?.restrictSpeaking),
-          friendship: friendshipState?.content as any
+          friendship: friendshipState?.content as any,
+          avatarUrl: (() => {
+            const mxc = roomAvatarState?.content?.url as string | undefined;
+            if (!mxc) return undefined;
+            return mxc.startsWith('mxc://') ? `${this.baseUrl}/_matrix/media/v3/download/${mxc.slice(6)}` : mxc;
+          })(),
         };
       }),
     );
@@ -2688,6 +2695,67 @@ class MatrixService {
       },
     );
     return newPinned;
+  }
+
+  // ─── Room Avatar ─────────────────────────────────────────
+  async setRoomAvatar(roomId: string, file: File): Promise<string> {
+    const mxcUrl = await this.uploadMedia(file, file.name);
+    await this.request(
+      `/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/state/m.room.avatar/`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ url: mxcUrl }),
+      },
+    );
+    return mxcUrl.startsWith('mxc://')
+      ? `${this.baseUrl}/_matrix/media/v3/download/${mxcUrl.slice(6)}`
+      : mxcUrl;
+  }
+
+  getRoomAvatarUrl(roomId: string): string | undefined {
+    // Called during room sync parsing — checks room state for avatar
+    return undefined; // Will be populated during room listing
+  }
+
+  // ─── Chat Background ────────────────────────────────────
+  async setChatBackground(roomId: string, file: File | null): Promise<string | null> {
+    if (!file) {
+      // Clear background
+      await this.request(
+        `/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/state/io.piechat.background/`,
+        {
+          method: 'PUT',
+          body: JSON.stringify({ url: '' }),
+        },
+      );
+      return null;
+    }
+    const mxcUrl = await this.uploadMedia(file, file.name);
+    await this.request(
+      `/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/state/io.piechat.background/`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ url: mxcUrl }),
+      },
+    );
+    return mxcUrl.startsWith('mxc://')
+      ? `${this.baseUrl}/_matrix/media/v3/download/${mxcUrl.slice(6)}`
+      : mxcUrl;
+  }
+
+  async getChatBackground(roomId: string): Promise<string | null> {
+    try {
+      const res = await this.request<{ url?: string }>(
+        `/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/state/io.piechat.background/`,
+        { method: 'GET' },
+      );
+      if (!res.url) return null;
+      return res.url.startsWith('mxc://')
+        ? `${this.baseUrl}/_matrix/media/v3/download/${res.url.slice(6)}`
+        : res.url;
+    } catch {
+      return null;
+    }
   }
 
   // ─── Inline Buttons (for Bot/AI assistant) ───────────
