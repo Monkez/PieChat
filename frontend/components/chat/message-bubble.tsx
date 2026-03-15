@@ -524,6 +524,8 @@ export function MessageBubble({
 
   const handleReactionClick = (emoji: string, e: React.MouseEvent) => {
     onReaction(msg.id, emoji);
+    // Close menu after a brief delay to let the animation start
+    setTimeout(closeLongPress, 350);
     // Get click origin from the button that was clicked
     const btnRect = e.currentTarget.getBoundingClientRect();
     const cx = btnRect.left + btnRect.width / 2;
@@ -764,8 +766,8 @@ export function MessageBubble({
 
     return createPortal(
       <div className="fixed inset-0 z-[9999] flex flex-col justify-end">
-        {/* Backdrop — semi-transparent, no blur so chat context is visible */}
-        <div className="absolute inset-0 bg-black/50 animate-in fade-in duration-150" onClick={closeLongPress} />
+        {/* Backdrop — semi-transparent, instant close on tap */}
+        <div className="absolute inset-0 bg-black/50" onClick={closeLongPress} />
 
         {/* Highlighted Message Preview */}
         <div className={cn(
@@ -779,10 +781,30 @@ export function MessageBubble({
               : "bg-white text-zinc-900 ring-sky-400/60 dark:bg-zinc-800 dark:text-zinc-100 dark:ring-sky-500/40",
           )}>
             <p className="text-sm leading-snug line-clamp-2">{previewText}</p>
-            <p className={cn(
-              "mt-1 text-[10px] font-medium",
-              isMe ? "text-sky-500/70 text-right" : "text-zinc-400 text-right"
-            )}>{previewTime}</p>
+            <div className="flex items-center justify-between mt-1">
+              <p className={cn(
+                "text-[10px] font-medium",
+                isMe ? "text-sky-500/70" : "text-zinc-400"
+              )}>{previewTime}</p>
+              {/* Live reactions in preview */}
+              {msg.reactions && Object.keys(msg.reactions).length > 0 && (
+                <div className="flex items-center gap-0.5">
+                  {Object.entries(msg.reactions).slice(0, 5).map(([emoji, count]) => {
+                    const emojiPath = REACTION_ICONS[emoji];
+                    return emojiPath ? (
+                      <div key={emoji} className="flex items-center gap-0.5 rounded-full bg-white/80 dark:bg-zinc-700/80 px-1.5 py-0.5 ring-1 ring-zinc-200/50 dark:ring-zinc-600/50">
+                        <div className="relative h-3.5 w-3.5">
+                          <Image src={emojiPath} alt={emoji} width={14} height={14} className="object-contain" />
+                        </div>
+                        <span className="text-[9px] font-bold text-zinc-600 dark:text-zinc-300">{count}</span>
+                      </div>
+                    ) : (
+                      <span key={emoji} className="text-[10px]">{emoji} {count}</span>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
