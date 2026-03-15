@@ -8,7 +8,8 @@ const config: CapacitorConfig = {
         // For Android Emulator: use 10.0.2.2 to reach host machine's dev server
         // For real device: use LAN IP  
         // For production: use the deployed server URL
-        url: 'https://piechat.site',
+        // Production server
+        url: 'https://piechart.site',
         cleartext: true,
         androidScheme: 'https',
     },

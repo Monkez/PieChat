@@ -63,7 +63,7 @@ export function validateOtpToken(input: unknown): { valid: boolean; error?: stri
     if (trimmed.length < 10 || trimmed.length > 64) {
         return { valid: false, error: 'Token OTP không hợp lệ', value: '' };
     }
-    if (!/^[a-zA-Z0-9]+$/.test(trimmed)) {
+    if (!/^[a-zA-Z0-9_\-]+$/.test(trimmed)) {
         return { valid: false, error: 'Token OTP chứa ký tự không hợp lệ', value: '' };
     }
     return { valid: true, value: trimmed };
