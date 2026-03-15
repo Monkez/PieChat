@@ -13,6 +13,7 @@ import { ContactCard, ContactCardData, detectPhoneNumbers, isPhoneOnlyMessage } 
 import { PollCard, PollInfo, PollVote } from './poll-card';
 import { ReminderCard, ReminderInfo } from './reminder-card';
 import { LinkPreviews } from './link-preview';
+import WidgetMessage from './widget-message';
 
 interface MessageBubbleProps {
   message: Message;
@@ -34,6 +35,7 @@ interface MessageBubbleProps {
   currentUserId?: string;
   pollVotes?: Record<string, PollVote[]>;
   onButtonClick?: (msgId: string, buttonId: string, label: string) => void;
+  onWidgetAction?: (msgId: string, action: string, data: unknown) => void;
   onAvatarClick?: (userId: string) => void;
   senderRole?: 'leader' | 'deputy' | 'member' | null;
 }
@@ -417,6 +419,7 @@ export function MessageBubble({
   currentUserId,
   pollVotes,
   onButtonClick,
+  onWidgetAction,
   onAvatarClick,
   senderRole,
 }: MessageBubbleProps) {
@@ -1041,6 +1044,16 @@ export function MessageBubble({
                 <p className="text-[11px] text-zinc-400 tabular-nums">{msg.callInfo.duration}</p>
               )}
             </div>
+          </div>
+        ) : msg.widget ? (
+          /* Widget Message (sandboxed interactive content) */
+          <div>
+            <WidgetMessage
+              widget={msg.widget}
+              isMe={isMe}
+              messageId={msg.id}
+              onAction={onWidgetAction}
+            />
           </div>
         ) : (
           /* Text Message Content */

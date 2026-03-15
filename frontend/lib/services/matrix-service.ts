@@ -1,3 +1,5 @@
+import type { WidgetPayload } from '@/lib/widget-sdk';
+
 export interface User {
   id: string;
   username: string;
@@ -58,6 +60,7 @@ export interface Message {
   edited?: boolean;
   inlineButtons?: Array<{ id: string; label: string; action?: string; url?: string; style?: 'primary' | 'secondary' | 'danger' }>;
   callInfo?: { type: 'voice' | 'video'; status: 'answered' | 'missed' | 'ongoing' | 'calling'; duration?: string };
+  widget?: WidgetPayload;
 }
 
 export interface UserDirectoryAccount {
@@ -185,6 +188,18 @@ interface UserDirectorySearchResponse {
   }>;
 }
 
+/** Generate a cryptographically secure random ID with optional prefix */
+function secureId(prefix = ''): string {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return prefix ? `${prefix}-${crypto.randomUUID()}` : crypto.randomUUID();
+  }
+  // Fallback for older environments
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+  return prefix ? `${prefix}-${hex}` : hex;
+}
+
 class MatrixService {
   private static instance: MatrixService;
   private accessToken: string | null = null;
@@ -305,13 +320,6 @@ class MatrixService {
   }
 
   private getPhoneAuthMap() {
-    const fallbackMap: Record<string, string> = {
-      '+84111111': 'u111111',
-      '+84222222': 'u222222',
-      '+84333333': 'u333333',
-      '+84444444': 'u444444',
-      '+84555555': 'u555555',
-    };
     let envMap: Record<string, string> = {};
     if (process.env.NEXT_PUBLIC_PHONE_AUTH_MAP) {
       try {
@@ -320,9 +328,7 @@ class MatrixService {
         envMap = {};
       }
     }
-    const merged = { ...envMap, ...fallbackMap };
-    // console.log('[MatrixService] Phone Map:', merged);
-    return merged;
+    return envMap;
   }
 
   public resolveKnownMatrixUserIdFromPhone(phone: string) {
@@ -526,17 +532,15 @@ class MatrixService {
     if (existing) {
       return existing;
     }
-    const generated = `device-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const generated = secureId('device');
     localStorage.setItem('piechat_device_id', generated);
     return generated;
   }
 
   private async loginMatrix(username: string, password: string): Promise<User> {
-    const devMatrixPassword = process.env.NEXT_PUBLIC_DEV_MATRIX_PASSWORD || '12345678';
+    const devMatrixPassword = process.env.NEXT_PUBLIC_DEV_MATRIX_PASSWORD;
     const allowDevPassword = process.env.NODE_ENV !== 'production' &&
-      (password === '1' || password === devMatrixPassword);
-    // Use actual password if provided in dev environment
-    const effectivePassword = password;
+      devMatrixPassword && (password === '1' || password === devMatrixPassword);
 
     const loginWithPassword = async (secret: string) => {
       let lastError: Error | null = null;
@@ -574,36 +578,13 @@ class MatrixService {
     };
 
     try {
-      return await loginWithPassword(effectivePassword);
+      return await loginWithPassword(password);
     } catch (error) {
-      if (!allowDevPassword) {
-        throw error;
+      // In dev mode with dev password, retry with the dev password
+      if (allowDevPassword && devMatrixPassword && password !== devMatrixPassword) {
+        return await loginWithPassword(devMatrixPassword);
       }
-
-      // Trong môi trường dev, thử đăng ký tài khoản mới nếu đăng nhập thất bại
-      try {
-        const registerPayload = await this.request<LoginResponse>(
-          '/_matrix/client/v3/register',
-          {
-            method: 'POST',
-            body: JSON.stringify({
-              username,
-              password: password,
-              auth: { type: 'm.login.dummy' },
-            }),
-          },
-          false,
-        );
-        this.persistSession(registerPayload.access_token, registerPayload.user_id);
-        return this.userFromId(registerPayload.user_id);
-      } catch (registerError) {
-        // Nếu đăng ký thất bại (có thể username đã tồn tại), thử đăng nhập lại
-        try {
-          return await loginWithPassword(devMatrixPassword);
-        } catch (finalError) {
-          throw finalError instanceof Error ? finalError : new Error('Đăng nhập thất bại');
-        }
-      }
+      throw error;
     }
   }
 
@@ -1634,6 +1615,7 @@ class MatrixService {
             edited,
             inlineButtons: (event.content?.['io.piechat.buttons'] as Message['inlineButtons']) || undefined,
             callInfo: (event as any)._callInfo || undefined,
+            widget: (event.content?.['io.piechat.widget'] as WidgetPayload) || undefined,
           };
         })
         .filter(Boolean)
@@ -1661,7 +1643,7 @@ class MatrixService {
   }
 
   async sendReaction(roomId: string, eventId: string, key: string): Promise<void> {
-    const txnId = `react-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const txnId = secureId('react');
     const payload = {
       body: key,
       'm.relates_to': {
@@ -1681,7 +1663,7 @@ class MatrixService {
   }
 
   async sendMessage(roomId: string, content: string): Promise<Message> {
-    const txnId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const txnId = secureId('msg');
 
     // Detect @mentions and build formatted_body with Matrix mention pills
     const mentionRegex = /@([\w\u00C0-\u024F\u1E00-\u1EFF\s]+?)(?=\s|$|[.,!?;:])/g;
@@ -1756,7 +1738,28 @@ class MatrixService {
     return msg;
   }
 
+  private static readonly MAX_UPLOAD_SIZE = 100 * 1024 * 1024; // 100MB
+  private static readonly ALLOWED_MIME_PREFIXES = [
+    'image/', 'video/', 'audio/', 'application/pdf',
+    'application/zip', 'application/x-zip', 'application/x-7z-compressed',
+    'application/x-rar', 'application/msword', 'application/vnd.ms-',
+    'application/vnd.openxmlformats-', 'text/', 'application/json',
+    'application/octet-stream',
+  ];
+
+  private validateUploadFile(file: File | Blob) {
+    if (file.size > MatrixService.MAX_UPLOAD_SIZE) {
+      throw new Error(`File quá lớn. Giới hạn ${MatrixService.MAX_UPLOAD_SIZE / (1024 * 1024)}MB`);
+    }
+    const mime = file.type || 'application/octet-stream';
+    const allowed = MatrixService.ALLOWED_MIME_PREFIXES.some(prefix => mime.startsWith(prefix));
+    if (!allowed) {
+      throw new Error(`Loại file không được hỗ trợ: ${mime}`);
+    }
+  }
+
   async uploadMedia(file: File | Blob, fileName: string): Promise<string> {
+    this.validateUploadFile(file);
     if (!this.accessToken) {
       this.accessToken = this.getPersistedAccessToken();
     }
@@ -1785,6 +1788,7 @@ class MatrixService {
     fileName: string,
     onProgress: (percent: number) => void,
   ): Promise<string> {
+    this.validateUploadFile(file);
     return new Promise((resolve, reject) => {
       if (!this.accessToken) {
         this.accessToken = this.getPersistedAccessToken();
@@ -1826,7 +1830,7 @@ class MatrixService {
     else if (file.type.startsWith('video/')) msgtype = 'm.video';
     else if (file.type.startsWith('audio/')) msgtype = 'm.audio';
 
-    const txnId = `file-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const txnId = secureId('file');
     const info: Record<string, unknown> = {
       mimetype: file.type,
       size: file.size,
@@ -1875,7 +1879,7 @@ class MatrixService {
       ? await this.uploadMediaWithProgress(zipBlob, fileName, onProgress)
       : await this.uploadMedia(zipBlob, fileName);
 
-    const txnId = `folder-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const txnId = secureId('folder');
     const body = {
       msgtype: 'io.piechat.folder',
       body: `📁 ${folderName}`,
@@ -1924,7 +1928,7 @@ class MatrixService {
     const fileName = `voice-${Date.now()}.webm`;
     const mxcUri = await this.uploadMedia(audioBlob, fileName);
 
-    const txnId = `voice-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const txnId = secureId('voice');
     const body = {
       msgtype: 'm.audio',
       body: 'Tin nhắn thoại',
@@ -1969,7 +1973,7 @@ class MatrixService {
   }
 
   async sendContactMessage(roomId: string, phone: string, displayName: string, userId?: string): Promise<Message> {
-    const txnId = `contact-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const txnId = secureId('contact');
     const body = {
       msgtype: 'io.piechat.contact',
       body: phone,
@@ -2004,7 +2008,7 @@ class MatrixService {
   }
 
   async sendStickerMessage(roomId: string, packId: string, stickerId: string, stickerUrl: string): Promise<Message> {
-    const txnId = `sticker-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const txnId = secureId('sticker');
     const body = {
       msgtype: 'io.piechat.sticker',
       body: `sticker:${packId}:${stickerId}`,
@@ -2045,8 +2049,8 @@ class MatrixService {
     anonymous: boolean;
     deadline: number | null;
   }): Promise<Message> {
-    const pollId = `poll-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const txnId = `poll-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const pollId = secureId('poll');
+    const txnId = secureId('poll');
     const userId = typeof window !== 'undefined' ? localStorage.getItem('matrix_user_id') || 'unknown' : 'unknown';
 
     const body = {
@@ -2085,7 +2089,7 @@ class MatrixService {
   }
 
   async votePoll(roomId: string, pollEventId: string, pollId: string, optionIds: string[]): Promise<void> {
-    const txnId = `vote-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const txnId = secureId('vote');
     const body = {
       msgtype: 'io.piechat.poll.vote',
       body: 'vote',
@@ -2112,8 +2116,8 @@ class MatrixService {
     title: string;
     deadline: number;
   }): Promise<Message> {
-    const reminderId = `rem-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const txnId = `rem-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const reminderId = secureId('rem');
+    const txnId = secureId('rem');
     const userId = typeof window !== 'undefined' ? localStorage.getItem('matrix_user_id') || 'unknown' : 'unknown';
 
     const body = {
@@ -2305,7 +2309,7 @@ class MatrixService {
 
   // Signaling for Voice/Video Calls (Matrix VOIP standards)
   async sendCallEvent(roomId: string, callId: string, type: string, content: any) {
-    const txnId = `call-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const txnId = secureId('call');
     await this.request(
       `/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/send/${encodeURIComponent(type)}/${txnId}`,
       {
@@ -2373,7 +2377,7 @@ class MatrixService {
 
   // ─── Reply to message ────────────────────────────────
   async sendReply(roomId: string, replyToEventId: string, body: string): Promise<string> {
-    const txnId = `reply-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const txnId = secureId('reply');
     const res = await this.request<{ event_id: string }>(
       `/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/send/m.room.message/${txnId}`,
       {
@@ -2394,7 +2398,7 @@ class MatrixService {
 
   // ─── Edit message ────────────────────────────────────
   async editMessage(roomId: string, originalEventId: string, newBody: string): Promise<string> {
-    const txnId = `edit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const txnId = secureId('edit');
     const res = await this.request<{ event_id: string }>(
       `/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/send/m.room.message/${txnId}`,
       {
@@ -2418,7 +2422,7 @@ class MatrixService {
 
   // ─── Delete (redact) message ─────────────────────────
   async deleteMessage(roomId: string, eventId: string, reason?: string): Promise<void> {
-    const txnId = `redact-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const txnId = secureId('redact');
     await this.request(
       `/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/redact/${encodeURIComponent(eventId)}/${txnId}`,
       {
@@ -2643,7 +2647,7 @@ class MatrixService {
     body: string,
     buttons: Array<{ id: string; label: string; action?: string; url?: string; style?: 'primary' | 'secondary' | 'danger' }>,
   ): Promise<Message> {
-    const txnId = `btn-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const txnId = secureId('btn');
     const eventRes = await this.request<{ event_id: string }>(
       `/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/send/m.room.message/${txnId}`,
       {
@@ -2669,7 +2673,7 @@ class MatrixService {
   }
 
   async sendButtonClick(roomId: string, messageId: string, buttonId: string, label: string): Promise<void> {
-    const txnId = `btnclk-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const txnId = secureId('btnclk');
     await this.request(
       `/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/send/io.piechat.button_click/${txnId}`,
       {
@@ -2681,6 +2685,36 @@ class MatrixService {
         }),
       },
     );
+  }
+  // ─── Widget Messages ────────────────────────────────
+  async sendWidgetMessage(
+    roomId: string,
+    fallbackText: string,
+    widget: WidgetPayload,
+  ): Promise<Message> {
+    const txnId = secureId('wdg');
+    const eventRes = await this.request<{ event_id: string }>(
+      `/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/send/m.room.message/${txnId}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({
+          msgtype: 'm.text',
+          body: fallbackText,
+          'io.piechat.widget': widget,
+        }),
+      },
+    );
+
+    const msg: Message = {
+      id: eventRes.event_id,
+      roomId,
+      senderId: this.getCurrentUserId() || '',
+      content: fallbackText,
+      timestamp: Date.now(),
+      status: 'sent',
+      widget,
+    };
+    return msg;
   }
 }
 

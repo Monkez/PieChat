@@ -362,7 +362,7 @@ export default function RoomPage() {
 
   const handleSendFiles = async (files: File[]) => {
     for (const file of files) {
-      const tempId = `temp-file-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const tempId = `temp-file-${crypto.randomUUID()}`;
       const icon = file.type.startsWith('image/') ? '📷' : file.type.startsWith('video/') ? '🎬' : '📎';
       const tempMsg: Message = {
         id: tempId,
@@ -599,7 +599,7 @@ export default function RoomPage() {
   const handleCreateReminder = async (data: ReminderData) => {
     if (!roomId) return;
     const tempId = `temp-rem-${Date.now()}`;
-    const reminderId = `rem-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const reminderId = `rem-${crypto.randomUUID()}`;
     const tempMsg: Message = {
       id: tempId,
       roomId,
@@ -1751,6 +1751,13 @@ export default function RoomPage() {
                       pollVotes={pollVotes}
                       onButtonClick={(msgId, btnId, label) => {
                         matrixService.sendButtonClick(roomId, msgId, btnId, label).catch(console.error);
+                      }}
+                      onWidgetAction={(messageId, action, data) => {
+                        console.log('[Widget Action]', { messageId, action, data });
+                        // Handle copy action from code widgets
+                        if (action === 'copy' && typeof data === 'string') {
+                          navigator.clipboard?.writeText(data).catch(() => {});
+                        }
                       }}
                       onAvatarClick={(userId) => setProfileUserId(userId)}
                       senderRole={senderRole}

@@ -5,34 +5,30 @@ import { useCallStore } from '@/lib/store/call-store';
 import { matrixService } from '@/lib/services/matrix-service';
 import { callSound } from '@/lib/call-sound';
 
-const ICE_SERVERS: RTCConfiguration = {
-    iceServers: [
+function buildIceConfig(): RTCConfiguration {
+    const turnUsername = process.env.NEXT_PUBLIC_TURN_USERNAME || '';
+    const turnCredential = process.env.NEXT_PUBLIC_TURN_CREDENTIAL || '';
+
+    const iceServers: RTCIceServer[] = [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'stun:stun.relay.metered.ca:80' },
-        {
-            urls: 'turn:a.relay.metered.ca:80',
-            username: 'e8dd65b92f6dde62f5d3b437',
-            credential: 'uWdWNmkhvyqTEswO',
-        },
-        {
-            urls: 'turn:a.relay.metered.ca:80?transport=tcp',
-            username: 'e8dd65b92f6dde62f5d3b437',
-            credential: 'uWdWNmkhvyqTEswO',
-        },
-        {
-            urls: 'turn:a.relay.metered.ca:443',
-            username: 'e8dd65b92f6dde62f5d3b437',
-            credential: 'uWdWNmkhvyqTEswO',
-        },
-        {
-            urls: 'turns:a.relay.metered.ca:443?transport=tcp',
-            username: 'e8dd65b92f6dde62f5d3b437',
-            credential: 'uWdWNmkhvyqTEswO',
-        },
-    ],
-    iceCandidatePoolSize: 10,
-};
+    ];
+
+    // Only add TURN servers when credentials are configured
+    if (turnUsername && turnCredential) {
+        const turnUrls = [
+            'turn:a.relay.metered.ca:80',
+            'turn:a.relay.metered.ca:80?transport=tcp',
+            'turn:a.relay.metered.ca:443',
+            'turns:a.relay.metered.ca:443?transport=tcp',
+        ];
+        for (const urls of turnUrls) {
+            iceServers.push({ urls, username: turnUsername, credential: turnCredential });
+        }
+    }
+
+    return { iceServers, iceCandidatePoolSize: 10 };
+}
 
 export function useWebRTC() {
     const {
@@ -98,7 +94,7 @@ export function useWebRTC() {
 
     // ─── Create peer connection ─────────────────────────
     const createPeerConnection = useCallback((stream: MediaStream) => {
-        const pc = new RTCPeerConnection(ICE_SERVERS);
+        const pc = new RTCPeerConnection(buildIceConfig());
 
         // Add ALL tracks (audio + video)
         stream.getTracks().forEach(track => {
