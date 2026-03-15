@@ -39,9 +39,10 @@ interface ChatInputProps {
   onScheduleMessage?: (content: string, sendAt: number) => void;
   members?: MentionMember[];
   onSendWidget?: (widgetPayload: object) => void;
+  onSendButtons?: (text: string, buttons: Array<{ id: string; label: string; action?: string; url?: string; style?: 'primary' | 'secondary' | 'danger' }>) => void;
 }
 
-export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoice, onSendContact, onSendSticker, onOpenPollDialog, onOpenReminderDialog, onTyping, replyEdit, onCancelReplyEdit, onEditMessage, onReplyMessage, placeholder, disabled, onScheduleMessage, members, onSendWidget }: ChatInputProps) {
+export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoice, onSendContact, onSendSticker, onOpenPollDialog, onOpenReminderDialog, onTyping, replyEdit, onCancelReplyEdit, onEditMessage, onReplyMessage, placeholder, disabled, onScheduleMessage, members, onSendWidget, onSendButtons }: ChatInputProps) {
   const [message, setMessage] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -54,6 +55,9 @@ export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoic
   // Widget paste state
   const [pendingWidget, setPendingWidget] = useState<object | null>(null);
   const [widgetPreviewTitle, setWidgetPreviewTitle] = useState<string>('');
+
+  // Buttons paste state
+  const [pendingButtons, setPendingButtons] = useState<{ text: string; buttons: Array<{ id: string; label: string; action?: string; url?: string; style?: 'primary' | 'secondary' | 'danger' }> } | null>(null);
 
   // Mention state
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
@@ -100,6 +104,32 @@ export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoic
    * The system will detect this, show a preview banner, and send as a widget.
    */
   const WIDGET_PREFIX = '//widget:';
+  const BUTTONS_PREFIX = '//buttons:';
+
+  // ─── Buttons Paste Handling ────────────────────────────
+  const tryParseButtonsPaste = (text: string): { valid: boolean; data?: { text: string; buttons: Array<{ id: string; label: string; action?: string; url?: string; style?: 'primary' | 'secondary' | 'danger' }> } } => {
+    const trimmed = text.trim();
+    if (!trimmed.startsWith(BUTTONS_PREFIX)) return { valid: false };
+    const jsonStr = trimmed.slice(BUTTONS_PREFIX.length).trim();
+    try {
+      const raw = JSON.parse(jsonStr);
+      if (!raw || typeof raw !== 'object') return { valid: false };
+      const btnText = raw.text || raw.body || raw.message || '';
+      const btns = raw.buttons;
+      if (!Array.isArray(btns) || btns.length === 0) return { valid: false };
+      // Ensure each button has id and label
+      const validButtons = btns.map((b: any, i: number) => ({
+        id: b.id || `btn-${i}`,
+        label: b.label || b.text || `Button ${i+1}`,
+        action: b.action,
+        url: b.url,
+        style: (['primary','secondary','danger'].includes(b.style) ? b.style : undefined) as 'primary'|'secondary'|'danger'|undefined,
+      }));
+      return { valid: true, data: { text: btnText, buttons: validButtons } };
+    } catch {
+      return { valid: false };
+    }
+  };
 
   const tryParseWidgetPaste = (text: string): { valid: boolean; payload?: WidgetPayload; title?: string } => {
     const trimmed = text.trim();
@@ -196,6 +226,13 @@ export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoic
       return;
     }
 
+    // Handle pending buttons send
+    if (pendingButtons) {
+      onSendButtons?.(pendingButtons.text, pendingButtons.buttons);
+      setPendingButtons(null);
+      return;
+    }
+
 
     if (replyEdit?.mode === 'edit' && message.trim()) {
       onEditMessage?.(replyEdit.messageId, message.trim());
@@ -275,13 +312,24 @@ export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoic
     e.target.style.height = 'auto';
     e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
 
-    // Widget paste detection on input change (covers non-paste paths too)
+    // Widget paste detection on input change
     if (value.trim().startsWith(WIDGET_PREFIX)) {
       const result = tryParseWidgetPaste(value);
       if (result.valid && result.payload) {
         setPendingWidget(result.payload);
         setWidgetPreviewTitle(result.title || 'Widget');
-        setMessage(''); // clear the input
+        setMessage('');
+        if (textareaRef.current) textareaRef.current.style.height = 'auto';
+        return;
+      }
+    }
+
+    // Buttons paste detection on input change
+    if (value.trim().startsWith(BUTTONS_PREFIX)) {
+      const result = tryParseButtonsPaste(value);
+      if (result.valid && result.data) {
+        setPendingButtons(result.data);
+        setMessage('');
         if (textareaRef.current) textareaRef.current.style.height = 'auto';
         return;
       }
@@ -581,6 +629,30 @@ export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoic
           </div>
         </div>
       )}
+
+      {/* Buttons Paste Preview Bar */}
+      {pendingButtons && (
+        <div className="flex items-center gap-2 rounded-t-2xl border border-b-0 border-teal-200 bg-teal-50/80 px-3 py-2 text-sm dark:border-teal-800/40 dark:bg-teal-950/30 animate-in fade-in slide-in-from-bottom-1 duration-200">
+          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-teal-200 dark:bg-teal-800/40">
+            <Zap className="h-3 w-3 text-teal-600 dark:text-teal-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] font-bold text-teal-600 dark:text-teal-400">🔘 Buttons sẵn sàng gửi</p>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate">
+              {pendingButtons.text || '(no text)'} — {pendingButtons.buttons.length} nút
+            </p>
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setPendingButtons(null)}
+              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+              title="Hủy buttons"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        </div>
+      )}
       {/* Pending Files Preview */}
       {pendingFiles.length > 0 && (
         <div className="flex flex-wrap gap-2 px-2">
@@ -811,15 +883,17 @@ export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoic
           </div>
 
           {/* Voice / Send toggle */}
-          {pendingWidget ? (
+          {pendingWidget || pendingButtons ? (
             <button
               onClick={() => handleSubmit()}
               disabled={disabled}
               className={cn(
                 "flex h-8 w-8 lg:h-7 lg:w-7 items-center justify-center rounded-full transition-all",
-                "bg-violet-600 text-white shadow-md hover:bg-violet-700 hover:scale-105 active:scale-95"
+                pendingButtons
+                  ? "bg-teal-600 text-white shadow-md hover:bg-teal-700 hover:scale-105 active:scale-95"
+                  : "bg-violet-600 text-white shadow-md hover:bg-violet-700 hover:scale-105 active:scale-95"
               )}
-              title="Gửi widget"
+              title={pendingButtons ? "Gửi buttons" : "Gửi widget"}
             >
               <Zap className="h-4 w-4 lg:h-3.5 lg:w-3.5" />
             </button>

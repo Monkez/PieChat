@@ -671,6 +671,31 @@ export default function RoomPage() {
     }
   };
 
+  // ─── Inline Buttons Handler ───────────────────────────────
+  const handleSendButtons = async (text: string, buttons: Array<{ id: string; label: string; action?: string; url?: string; style?: 'primary' | 'secondary' | 'danger' }>) => {
+    if (!roomId) return;
+    const tempId = `temp-btn-${Date.now()}`;
+    const tempMsg: Message = {
+      id: tempId,
+      roomId,
+      senderId: currentUser?.id || 'me',
+      content: text,
+      timestamp: Date.now(),
+      status: 'sending',
+      inlineButtons: buttons,
+    };
+    setMessages(prev => [...prev, tempMsg]);
+
+    try {
+      await matrixService.sendMessageWithButtons(roomId, text, buttons);
+      setMessages(prev => prev.map(item => item.id === tempId ? { ...item, status: 'sent' } : item));
+      await loadMessages(true);
+    } catch (err) {
+      console.error('Buttons send failed:', err);
+      setMessages(prev => prev.map(item => item.id === tempId ? { ...item, status: 'failed' } : item));
+    }
+  };
+
   const handleContactMessage = async (userId: string) => {
     const dmRoom = await createDirectChatByUserId(userId);
     if (dmRoom) {
@@ -1867,6 +1892,7 @@ export default function RoomPage() {
                   username: m.username,
                 }))}
                 onSendWidget={handleSendWidget}
+                onSendButtons={handleSendButtons}
               />
             </div>
           </>
