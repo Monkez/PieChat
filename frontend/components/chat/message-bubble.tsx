@@ -493,7 +493,9 @@ export function MessageBubble({
   };
 
   const isScript = msg.widget != null;
-  const msgText = (!msg.widget && !msg.msgtype?.startsWith('m.')) ? msg.content : '';
+  // Include content for plain text messages (m.text or no msgtype). Exclude media (m.image, m.audio, m.video, m.file) and custom types.
+  const isPlainText = !msg.widget && (!msg.msgtype || msg.msgtype === 'm.text');
+  const msgText = isPlainText ? msg.content : '';
   const smartPhones = useMemo(() => extractPhones(msgText), [msgText]);
   const smartAccounts = useMemo(() => extractBankAccounts(msgText), [msgText]);
   const smartOtps = useMemo(() => extractOtps(msgText), [msgText]);

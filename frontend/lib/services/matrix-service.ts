@@ -1615,7 +1615,15 @@ class MatrixService {
             edited,
             inlineButtons: (event.content?.['io.piechat.buttons'] as Message['inlineButtons']) || undefined,
             callInfo: (event as any)._callInfo || undefined,
-            widget: (event.content?.['io.piechat.widget'] as WidgetPayload) || undefined,
+            widget: (() => {
+              const raw = event.content?.['io.piechat.widget'];
+              if (!raw) return undefined;
+              // May be stored as a JSON string (to avoid Matrix float rejection) or as object
+              if (typeof raw === 'string') {
+                try { return JSON.parse(raw) as WidgetPayload; } catch { return undefined; }
+              }
+              return raw as WidgetPayload;
+            })(),
           };
         })
         .filter(Boolean)
@@ -2700,7 +2708,8 @@ class MatrixService {
         body: JSON.stringify({
           msgtype: 'm.text',
           body: fallbackText,
-          'io.piechat.widget': widget,
+          // Stored as a JSON string to avoid gomatrixserverlib rejecting float values
+          'io.piechat.widget': JSON.stringify(widget),
         }),
       },
     );
