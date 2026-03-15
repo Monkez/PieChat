@@ -1276,6 +1276,11 @@ export default function ChatLayout({
                         <span className="shrink-0 text-xs lg:text-[10px] text-zinc-400 font-medium ml-2">
                           {(() => {
                             if (!room.lastMessage) return '';
+                            // Hide timestamp if chat history was cleared
+                            try {
+                              const cleared = localStorage.getItem(`piechat_cleared_${room.id}`);
+                              if (cleared && room.lastMessage.timestamp <= Number(cleared)) return '';
+                            } catch {}
                             const date = new Date(room.lastMessage.timestamp);
                             const now = new Date();
                             const isToday = date.toDateString() === now.toDateString();
@@ -1310,19 +1315,26 @@ export default function ChatLayout({
                             ? "font-bold text-sky-600 dark:text-sky-400"
                             : "text-zinc-500 dark:text-zinc-400"
                         )}>
-                          {room.lastMessage ? (
-                            <>
-                              <span className="font-semibold mr-1">
-                                {room.lastMessage.senderId === currentUser?.id
-                                  ? `${t(language, 'chatYou')}:`
-                                  : `${room.members.find(m => m.id === room.lastMessage?.senderId)?.displayName || room.members.find(m => m.id === room.lastMessage?.senderId)?.username || t(language, 'chatSomeone')}:`
-                                }
-                              </span>
-                              {room.lastMessage.content}
-                            </>
-                          ) : (
-                            t(language, 'chatNoMessages')
-                          )}
+                          {(() => {
+                            // Check if chat was cleared for this room
+                            let isCleared = false;
+                            try {
+                              const cleared = localStorage.getItem(`piechat_cleared_${room.id}`);
+                              if (cleared && room.lastMessage && room.lastMessage.timestamp <= Number(cleared)) isCleared = true;
+                            } catch {}
+                            if (!room.lastMessage || isCleared) return t(language, 'chatNoMessages');
+                            return (
+                              <>
+                                <span className="font-semibold mr-1">
+                                  {room.lastMessage.senderId === currentUser?.id
+                                    ? `${t(language, 'chatYou')}:`
+                                    : `${room.members.find(m => m.id === room.lastMessage?.senderId)?.displayName || room.members.find(m => m.id === room.lastMessage?.senderId)?.username || t(language, 'chatSomeone')}:`
+                                  }
+                                </span>
+                                {room.lastMessage.content}
+                              </>
+                            );
+                          })()}
                         </span>
                         <div className="flex items-center gap-1 shrink-0">
                           {mutedRoomIds.includes(room.id) && (
@@ -1566,7 +1578,7 @@ export default function ChatLayout({
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <p className="truncate text-xs font-semibold text-zinc-900 dark:text-zinc-100">{dName}</p>
-                                  <p className="truncate text-[10px] text-zinc-500">{room.lastMessage?.content || t(language, 'chatNoMessages')}</p>
+                                  <p className="truncate text-[10px] text-zinc-500">{(() => { try { const c = localStorage.getItem(`piechat_cleared_${room.id}`); if (c && room.lastMessage && room.lastMessage.timestamp <= Number(c)) return t(language, 'chatNoMessages'); } catch {} return room.lastMessage?.content || t(language, 'chatNoMessages'); })()}</p>
                                 </div>
                               </Link>
                               <div className="flex items-center gap-1 shrink-0">
@@ -1759,7 +1771,7 @@ export default function ChatLayout({
                             )}
                           </div>
                           <p className="truncate text-[11px] text-zinc-500 dark:text-zinc-400">
-                            {room.lastMessage?.content || 'Chưa có tin nhắn'}
+                            {(() => { try { const c = localStorage.getItem(`piechat_cleared_${room.id}`); if (c && room.lastMessage && room.lastMessage.timestamp <= Number(c)) return 'Chưa có tin nhắn'; } catch {} return room.lastMessage?.content || 'Chưa có tin nhắn'; })()}
                           </p>
                         </div>
                       </button>
