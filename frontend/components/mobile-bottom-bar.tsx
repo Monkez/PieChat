@@ -141,12 +141,12 @@ export function MobileBottomBar({ activeSection, onSectionChange }: MobileBottom
                             initial={{ y: "100%" }}
                             animate={{ y: 0 }}
                             exit={{ y: "100%" }}
-                            transition={{ type: "spring", damping: 35, stiffness: 500 }}
+                            transition={{ type: "spring", damping: 40, stiffness: 800, mass: 0.5 }}
                             ref={sheetRef}
                             className="relative bg-white dark:bg-zinc-900 rounded-t-3xl shadow-2xl ring-1 ring-black/5 dark:ring-zinc-700 pb-24"
                         style={{
                             transform: sheetDragY > 0 ? `translateY(${sheetDragY}px)` : undefined,
-                            transition: sheetDragY > 0 ? 'none' : 'transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)',
+                            transition: sheetDragY > 0 ? 'none' : undefined,
                         }}
                         onTouchStart={(e) => {
                             sheetTouchStartY.current = e.touches[0].clientY;

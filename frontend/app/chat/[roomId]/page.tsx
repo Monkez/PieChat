@@ -322,9 +322,9 @@ export default function RoomPage() {
     return el.scrollHeight - el.scrollTop - el.clientHeight < 150;
   };
 
-  const scrollToBottom = (force = false) => {
+  const scrollToBottom = (force = false, instant = false) => {
     if (force || isNearBottom()) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      messagesEndRef.current?.scrollIntoView({ behavior: instant ? 'instant' : 'smooth' });
       userScrolledUpRef.current = false;
     }
   };
@@ -334,9 +334,9 @@ export default function RoomPage() {
     const newCount = messages.length;
     prevMessageCountRef.current = newCount;
 
-    // Initial load or first batch → always scroll to bottom
+    // Initial load or first batch → always scroll to bottom instantly
     if (prevCount === 0 && newCount > 0) {
-      setTimeout(() => scrollToBottom(true), 100);
+      setTimeout(() => scrollToBottom(true, true), 0);
       return;
     }
 
@@ -344,9 +344,9 @@ export default function RoomPage() {
     if (newCount > prevCount) {
       const lastMsg = messages[messages.length - 1];
       const isMine = lastMsg?.senderId === currentUser?.id;
-      // Always scroll for own messages, only scroll for others if near bottom
+      // Own messages: instant scroll. Others: only if near bottom, smooth.
       if (isMine) {
-        setTimeout(() => scrollToBottom(true), 50);
+        scrollToBottom(true, true);
       } else {
         scrollToBottom(false);
       }
@@ -1056,11 +1056,7 @@ export default function RoomPage() {
   }, [room?.type, room?.members, currentUser?.id]);
 
   return (
-    <motion.div
-      initial={{ opacity: 0, x: 8 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: -8 }}
-      transition={{ duration: 0.15, type: 'spring', stiffness: 500, damping: 35 }}
+    <div
       className="flex h-[100dvh] lg:h-full min-h-0 flex-col relative bg-zinc-50 dark:bg-zinc-950"
       onDragEnter={(e) => {
         e.preventDefault();
@@ -2954,7 +2950,7 @@ export default function RoomPage() {
           </div>
         </div>
       )}
-    </motion.div>
+    </div>
   );
 }
 
