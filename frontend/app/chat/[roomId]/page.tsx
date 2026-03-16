@@ -2078,6 +2078,9 @@ export default function RoomPage() {
                 // Group messages if sender is same as previous and time diff is small (< 5 mins)
                 const prevMsg = displayedMessages[idx - 1];
                 const isFirst = !prevMsg || prevMsg.senderId !== msg.senderId || (msg.timestamp - prevMsg.timestamp > 5 * 60 * 1000);
+                // isLast: true if next message is from different sender or >5min gap (show timestamp only on last)
+                const nextMsg = displayedMessages[idx + 1];
+                const isLast = !nextMsg || nextMsg.senderId !== msg.senderId || (nextMsg.timestamp - msg.timestamp > 5 * 60 * 1000);
 
                 const showDateSeparator = !prevMsg || new Date(msg.timestamp).toDateString() !== new Date(prevMsg.timestamp).toDateString();
 
@@ -2095,6 +2098,7 @@ export default function RoomPage() {
                       isMe={isMe}
                       senderName={senderName}
                       isFirst={isFirst}
+                      isLast={isLast}
                       searchQuery={roomSearch}
                       activeMenuId={activeMenuMessageId}
                       setActiveMenuId={setActiveMenuMessageId}

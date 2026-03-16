@@ -20,6 +20,7 @@ interface MessageBubbleProps {
   isMe: boolean;
   senderName: string;
   isFirst: boolean;
+  isLast: boolean;
   searchQuery?: string;
   activeMenuId: string | null;
   setActiveMenuId: (id: string | null) => void;
@@ -407,6 +408,7 @@ function MessageBubbleInner({
   isMe,
   senderName,
   isFirst,
+  isLast,
   searchQuery,
   activeMenuId,
   setActiveMenuId,
@@ -1382,7 +1384,8 @@ function MessageBubbleInner({
           </div>
         )}
 
-        {/* Timestamp */}
+        {/* Timestamp — only show for last message in a consecutive group */}
+        {isLast && (
         <div
           className={cn(
             "mt-0.5 flex items-center gap-1 text-[10px] font-medium select-none leading-none",
@@ -1425,6 +1428,7 @@ function MessageBubbleInner({
             </span>
           )}
         </div>
+        )}
 
         {/* Reactions Display */}
         {msg.reactions && Object.keys(msg.reactions).length > 0 && (
@@ -1482,6 +1486,7 @@ export const MessageBubble = memo(MessageBubbleInner, (prev, next) => {
   if (prev.message.redacted !== next.message.redacted) return false;
   if (prev.isMe !== next.isMe) return false;
   if (prev.isFirst !== next.isFirst) return false;
+  if (prev.isLast !== next.isLast) return false;
   if (prev.searchQuery !== next.searchQuery) return false;
   if (prev.isPinned !== next.isPinned) return false;
   if (prev.activeMenuId !== next.activeMenuId) return false;
