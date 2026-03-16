@@ -55,6 +55,12 @@ import { AssistantManagerModal } from '@/components/assistant-config-modal';
 import { App as CapApp } from '@capacitor/app';
 import jsQR from 'jsqr';
 import { NotificationPermissionBanner } from '@/components/notification-permission-banner';
+import {
+  notifyNewMessages,
+  seedNotifiedMessageIds,
+  requestNotificationPermission,
+  initCapacitorNotifications,
+} from '@/lib/services/chat-notification-service';
 
 export default function ChatLayout({
   children,
@@ -207,6 +213,75 @@ export default function ChatLayout({
     }, 5000);
     return () => clearInterval(timer);
   }, [fetchRoomsSafely]);
+
+  // ─── Global Notification Polling (works across ALL rooms) ───
+  const globalNotifSeededRef = useRef(false);
+  const globalNotifLastMsgIdsRef = useRef<Record<string, string>>({});
+
+  useEffect(() => {
+    requestNotificationPermission();
+    initCapacitorNotifications();
+  }, []);
+
+  useEffect(() => {
+    if (!currentUser?.id || rooms.length === 0) return;
+
+    // Detect which room is currently active from URL
+    const activeRoomId = pathname.startsWith('/chat/') ? decodeURIComponent(pathname.split('/chat/')[1] || '') : null;
+
+    // For each room with unread messages, fetch latest and notify
+    const checkGlobalNotifications = async () => {
+      const mutedSet = new Set(mutedRoomIds);
+
+      for (const room of rooms) {
+        // Skip muted rooms
+        if (mutedSet.has(room.id)) continue;
+        // Skip the active room — page.tsx handles that
+        if (room.id === activeRoomId) continue;
+        // Skip rooms without unread count indicator
+        if (!room.lastMessage) continue;
+
+        // Check if lastMessage changed (by comparing event ID or timestamp)
+        const lastKey = `${room.lastMessage}`;
+        if (globalNotifLastMsgIdsRef.current[room.id] === lastKey) continue;
+        globalNotifLastMsgIdsRef.current[room.id] = lastKey;
+
+        // On first load, seed but don't notify
+        if (!globalNotifSeededRef.current) continue;
+
+        try {
+          const msgs = await matrixService.getMessages(room.id);
+          if (msgs.length === 0) continue;
+
+          // Only notify about the most recent 5 messages
+          const recent = msgs.slice(-5);
+          notifyNewMessages(
+            recent,
+            currentUser.id,
+            activeRoomId,
+            (userId) => {
+              const member = room.members.find(m => m.id === userId);
+              return member?.displayName || member?.username || userId;
+            },
+            () => {
+              if (room.type === 'dm') {
+                const other = room.members.find(m => m.id !== currentUser.id);
+                return other?.displayName || other?.username || room.name || 'PieChat';
+              }
+              return room.name || 'PieChat';
+            },
+            mutedRoomIds,
+          );
+        } catch {
+          // Skip this room
+        }
+      }
+
+      globalNotifSeededRef.current = true;
+    };
+
+    checkGlobalNotifications();
+  }, [rooms, currentUser?.id, pathname, mutedRoomIds]);
 
   // Filter out rooms with raw IDs if they don't have a resolved name or valid peer
   // Ensure all joined rooms are visible

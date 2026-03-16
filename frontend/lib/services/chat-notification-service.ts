@@ -367,23 +367,48 @@ export function notifyNewMessages(
     // Skip notifications for muted rooms
     if (mutedSet.has(msg.roomId)) continue;
 
+    // Skip messages older than 30 seconds (prevent notifications on first load)
+    if (Date.now() - msg.timestamp > 30_000) continue;
+
     const senderName = resolveUserName(msg.senderId);
     const roomName = resolveRoomName(msg.roomId);
     const body = getMessageBody(msg);
+    const notifTitle = `${senderName} • ${roomName}`;
+    const notifUrl = `/chat/${encodeURIComponent(msg.roomId)}`;
 
-    // Browser notification (only works on HTTPS / localhost)
-    if (canUseBrowserNotif && !isDocumentVisible()) {
-      showNotification(`${senderName} • ${roomName}`, body, {
+    // Browser/SW notification — send for any room except the active one
+    if (canUseBrowserNotif) {
+      showNotification(notifTitle, body, {
         tag: `room-${msg.roomId}`,
-        data: {
-          url: `/chat/${encodeURIComponent(msg.roomId)}`,
-          roomId: msg.roomId,
-        },
+        data: { url: notifUrl, roomId: msg.roomId },
       });
     }
 
-    // Always show in-app toast + sound (works on HTTP too)
-    showToast(`${senderName} • ${roomName}`, body);
+    // Capacitor local notification for native platforms (fire-and-forget)
+    void (async () => {
+      try {
+        const { Capacitor } = await import('@capacitor/core');
+        if (Capacitor.isNativePlatform()) {
+          // @ts-ignore — optional dependency
+          const { LocalNotifications } = await import('@capacitor/local-notifications');
+          await LocalNotifications.schedule({
+            notifications: [{
+              id: Math.floor(Math.random() * 2147483647),
+              title: notifTitle,
+              body,
+              smallIcon: 'ic_notification',
+              largeIcon: 'ic_launcher',
+              extra: { url: notifUrl, roomId: msg.roomId },
+            }],
+          });
+        }
+      } catch {
+        // Capacitor not available
+      }
+    })();
+
+    // In-app toast + sound
+    showToast(notifTitle, body);
     playNotificationSound();
   }
 }
