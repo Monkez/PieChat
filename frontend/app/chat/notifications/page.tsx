@@ -69,9 +69,8 @@ export default function NotificationsPage() {
         {/* PieChat Logo */}
         <div className="flex items-center gap-2 mb-3 lg:hidden">
           <Link href="/chat">
-            <img src="/PieChatIcon.png" alt="PieChat" className="h-7 w-7" />
+            <span className="text-2xl font-extrabold tracking-tight bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 bg-clip-text text-transparent">PieChat</span>
           </Link>
-          <span className="text-sm font-bold text-zinc-800 dark:text-zinc-200">PieChat</span>
         </div>
         <div className="flex items-center justify-between pb-3">
           <div className="flex items-center gap-3">

@@ -170,9 +170,8 @@ export default function ProfilePage() {
           <Link href="/chat" className="rounded-full p-2 bg-black/30 text-white hover:bg-black/50 backdrop-blur-sm transition-colors">
             <ArrowLeft className="h-5 w-5" />
           </Link>
-          <div className="flex items-center gap-2 lg:hidden">
-            <img src="/PieChatIcon.png" alt="PieChat" className="h-6 w-6" />
-            <span className="text-sm font-bold text-white drop-shadow-lg">PieChat</span>
+          <div className="lg:hidden">
+            <span className="text-2xl font-extrabold tracking-tight bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 bg-clip-text text-transparent drop-shadow-lg">PieChat</span>
           </div>
         </div>
 
