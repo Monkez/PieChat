@@ -2046,7 +2046,7 @@ export default function RoomPage() {
             })()}
             <div
               ref={chatContainerRef}
-              className="flex-1 space-y-3 lg:space-y-3 overflow-y-auto bg-sky-50/50 px-1 py-1 lg:p-4 dark:bg-black/90 scrollbar-thin scrollbar-thumb-zinc-200 dark:scrollbar-thumb-zinc-800"
+              className="flex-1 space-y-0.5 lg:space-y-1 overflow-y-auto bg-sky-50/50 px-1 py-1 lg:p-4 dark:bg-black/90 scrollbar-thin scrollbar-thumb-zinc-200 dark:scrollbar-thumb-zinc-800"
               style={chatBackground ? {
                 backgroundImage: `url(${chatBackground})`,
                 backgroundSize: 'cover',
