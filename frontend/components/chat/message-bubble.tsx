@@ -1008,7 +1008,7 @@ function MessageBubbleInner({
       className={cn(
         "group flex w-full gap-2 lg:gap-3 transition-all px-1 py-px lg:px-2 lg:py-0.5",
         hasHover && "hover:bg-zinc-50/50 dark:hover:bg-zinc-800/20",
-        msg.reactions && Object.keys(msg.reactions).length > 0 && "pb-6",
+        msg.reactions && Object.keys(msg.reactions).length > 0 && "pb-9",
         isMe ? "justify-end" : "justify-start",
         longPressActive && "bg-sky-50/80 dark:bg-sky-900/20"
       )}
