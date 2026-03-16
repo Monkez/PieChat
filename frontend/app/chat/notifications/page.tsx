@@ -5,6 +5,7 @@ import { Bell, BellOff, Check, CheckCheck, Trash2, ArrowLeft, Megaphone, AtSign,
 import { notificationService, AppNotification } from '@/lib/services/notification-service';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
+import { PieChatLogoHeader } from '@/components/piechat-logo-header';
 
 const typeConfig: Record<AppNotification['type'], { icon: typeof Bell; color: string; bg: string; label: string }> = {
   system:  { icon: Megaphone,     color: 'text-sky-600 dark:text-sky-400',     bg: 'bg-sky-100 dark:bg-sky-900/30',     label: 'Hệ thống' },
@@ -64,14 +65,9 @@ export default function NotificationsPage() {
 
   return (
     <div className="flex h-full flex-col bg-white dark:bg-zinc-950">
+      <PieChatLogoHeader />
       {/* Header */}
-      <div className="border-b border-zinc-100 dark:border-zinc-800 px-4 lg:px-6" style={{ paddingTop: 'max(1rem, env(safe-area-inset-top))' }}>
-        {/* PieChat Logo */}
-        <div className="flex items-center gap-2 mb-3 lg:hidden">
-          <Link href="/chat">
-            <span className="text-2xl font-extrabold tracking-tight bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 bg-clip-text text-transparent">PieChat</span>
-          </Link>
-        </div>
+      <div className="border-b border-zinc-100 dark:border-zinc-800 px-4 pt-3 lg:pt-4 lg:px-6">
         <div className="flex items-center justify-between pb-3">
           <div className="flex items-center gap-3">
             <Link href="/chat" className="lg:hidden rounded-full p-1.5 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800">

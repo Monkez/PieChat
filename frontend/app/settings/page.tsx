@@ -9,6 +9,7 @@ import { t } from '@/lib/i18n';
 import { authUrl } from '@/lib/config';
 import LanguageSwitcher from '@/components/language-switcher';
 import { MobileBottomBar } from '@/components/mobile-bottom-bar';
+import { PieChatLogoHeader } from '@/components/piechat-logo-header';
 import { getNotifSound, setNotifSound, playNotifSoundPreview, type NotifSoundType } from '@/lib/services/chat-notification-service';
 import { useThemeStore, PRESET_COLORS } from '@/lib/store/theme-store';
 
@@ -78,12 +79,7 @@ export default function SettingsPage() {
   return (
     <div className="flex h-screen bg-zinc-50 dark:bg-black overflow-y-auto">
       <div className="mx-auto w-full max-w-3xl px-4 py-8 lg:pb-8" style={{ paddingTop: 'max(2rem, env(safe-area-inset-top, 2rem))', paddingBottom: 'calc(8rem + env(safe-area-inset-bottom, 0px))' }}>
-        {/* PieChat Logo — mobile only */}
-        <div className="flex items-center gap-2 mb-4 lg:hidden">
-          <Link href="/chat">
-            <span className="text-2xl font-extrabold tracking-tight bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 bg-clip-text text-transparent">PieChat</span>
-          </Link>
-        </div>
+        <PieChatLogoHeader />
 
         <div className="mb-6 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">

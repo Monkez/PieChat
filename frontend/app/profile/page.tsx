@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation';
 import { useUiStore } from '@/lib/store/ui-store';
 import { t } from '@/lib/i18n';
 import { MobileBottomBar } from '@/components/mobile-bottom-bar';
+import { PieChatLogoHeader } from '@/components/piechat-logo-header';
 
 interface ProfileSettings {
   bio: string;
@@ -165,14 +166,12 @@ export default function ProfilePage() {
   return (
     <div className="flex h-screen bg-zinc-50 dark:bg-black overflow-y-auto">
       <div className="mx-auto w-full max-w-2xl pb-24 lg:pb-8">
-        {/* Back Button + PieChat Logo — floating */}
-        <div className="sticky top-0 z-30 flex items-center gap-3 px-4 py-3" style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}>
+        <PieChatLogoHeader />
+        {/* Back Button — floating */}
+        <div className="sticky top-0 z-30 flex items-center gap-3 px-4 py-3">
           <Link href="/chat" className="rounded-full p-2 bg-black/30 text-white hover:bg-black/50 backdrop-blur-sm transition-colors">
             <ArrowLeft className="h-5 w-5" />
           </Link>
-          <div className="lg:hidden">
-            <span className="text-2xl font-extrabold tracking-tight bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 bg-clip-text text-transparent drop-shadow-lg">PieChat</span>
-          </div>
         </div>
 
         {/* Cover Image */}
