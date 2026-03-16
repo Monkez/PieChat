@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useMemo, useCallback, memo } from 'react';
+import { useState, useRef, useMemo, useCallback, memo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import Image from 'next/image';
 import { MoreVertical, Reply, Forward, Info, Trash2, Repeat, Download, Play, Pause, FileIcon, Copy, Pin, PinOff, Pencil, Phone, CreditCard, KeyRound, Link2, Code2, MapPin, Timer, Ban } from 'lucide-react';
@@ -437,6 +437,16 @@ function MessageBubbleInner({
   const touchMoved = useRef(false);
   const sheetTouchStartY = useRef(0);
   const [sheetDragY, setSheetDragY] = useState(0);
+
+  // Detect if the device supports hover (mouse) vs touch-only
+  const [hasHover, setHasHover] = useState(true);
+  useEffect(() => {
+    const mq = window.matchMedia('(hover: hover) and (pointer: fine)');
+    setHasHover(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setHasHover(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
 
   const handleMouseEnter = () => {
     if (msgRef.current) {
@@ -994,7 +1004,8 @@ function MessageBubbleInner({
     {renderMobileSheet()}
     <div
       className={cn(
-        "group flex w-full gap-2 lg:gap-3 transition-all lg:hover:bg-zinc-50/50 lg:dark:hover:bg-zinc-800/20 px-1 py-0.5 lg:px-2 lg:py-1",
+        "group flex w-full gap-2 lg:gap-3 transition-all px-1 py-0.5 lg:px-2 lg:py-1",
+        hasHover && "hover:bg-zinc-50/50 dark:hover:bg-zinc-800/20",
         isMe ? "justify-end" : "justify-start",
         longPressActive && "bg-sky-50/80 dark:bg-sky-900/20"
       )}
@@ -1002,8 +1013,10 @@ function MessageBubbleInner({
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       onTouchMove={handleTouchMove}
-      onContextMenu={(e) => { e.preventDefault(); }}
-      style={{ WebkitTouchCallout: 'none', userSelect: 'none' }}
+      {...(!hasHover ? {
+        onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
+        style: { WebkitTouchCallout: 'none' as const, userSelect: 'none' as const },
+      } : {})}
     >
       {!isMe && (
         <div className={cn("flex flex-col justify-end pb-1 cursor-pointer", isFirst ? "opacity-100" : "opacity-0")} onClick={() => onAvatarClick?.(msg.senderId)}>
@@ -1046,10 +1059,10 @@ function MessageBubbleInner({
             : { width: val };                   // e.g. "80%" → exactly 80% of parent — explicit width, NOT maxWidth
         })() : undefined}
       >
-        {/* Reaction Bar on Hover — hidden when menu is open */}
-        {!msg.id.startsWith('temp-') && activeMenuId !== msg.id && (
+        {/* Reaction Bar on Hover — only on devices with mouse */}
+        {hasHover && !msg.id.startsWith('temp-') && activeMenuId !== msg.id && (
           <div className={cn(
-            "absolute z-30 hidden lg:group-hover/msg:flex justify-center min-w-[220px]",
+            "absolute z-30 hidden group-hover/msg:flex justify-center min-w-[220px]",
             showAbove
               ? "bottom-full pb-2.5"
               : "top-full pt-2.5",
@@ -1079,12 +1092,13 @@ function MessageBubbleInner({
           <div className="fixed inset-0 z-30" onClick={() => setActiveMenuId(null)} />
         )}
 
-        {/* Message Actions Menu Button */}
+        {/* Message Actions Menu Button — only on devices with mouse */}
+        {hasHover && (
         <div className={cn(
           "absolute top-1 items-center z-40 transition-all",
           activeMenuId === msg.id
             ? "flex opacity-100"
-            : "hidden lg:group-hover/msg:flex opacity-0 lg:group-hover/msg:opacity-100",
+            : "hidden group-hover/msg:flex opacity-0 group-hover/msg:opacity-100",
           isMe ? "right-full mr-3" : "left-full ml-3"
         )}>
           <div className={cn("absolute h-10 w-10", isMe ? "-right-5" : "-left-5")} />
@@ -1179,6 +1193,7 @@ function MessageBubbleInner({
             )}
           </div>
         </div>
+        )}
 
         {/* Sender Name (for others) */}
         {!isMe && isFirst && (
