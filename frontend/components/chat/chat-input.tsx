@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, Paperclip, Mic, Square, FolderOpen, File, X, Loader2, Contact, BarChart3, AlarmClock, Reply, Pencil, Clock, AtSign, Code2, Zap, Plus, MapPin, Timer, Smile } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { StickerPicker } from './sticker-picker';
 import { createChartWidget, createTableWidget, createProgressWidget, createCodeWidget, createCustomWidget } from '@/lib/widget-sdk';
@@ -700,8 +701,15 @@ export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoic
             <Paperclip className="h-4 w-4" />
           </button>
 
+          <AnimatePresence>
           {isAttachMenuOpen && (
-            <div className="absolute bottom-full left-0 mb-2 w-48 overflow-hidden rounded-2xl border border-zinc-200 bg-white p-1.5 shadow-2xl ring-1 ring-black/5 dark:border-zinc-700 dark:bg-zinc-900 animate-in fade-in slide-in-from-bottom-2 zoom-in-95 duration-200">
+            <motion.div
+              initial={{ opacity: 0, y: 10, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.95 }}
+              transition={{ duration: 0.15 }}
+              className="absolute bottom-full left-0 mb-2 w-48 overflow-hidden rounded-2xl border border-zinc-200 bg-white p-1.5 shadow-2xl ring-1 ring-black/5 dark:border-zinc-700 dark:bg-zinc-900 origin-bottom-left"
+            >
               <button
                 onClick={() => fileInputRef.current?.click()}
                 className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-zinc-700 hover:bg-sky-50 hover:text-sky-700 dark:text-zinc-200 dark:hover:bg-sky-900/20 dark:hover:text-sky-400 transition-colors"
@@ -724,8 +732,9 @@ export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoic
                 <Contact className="h-4 w-4" />
                 Gửi danh thiếp
               </button>
-            </div>
+            </motion.div>
           )}
+          </AnimatePresence>
 
           {/* Schedule Picker */}
           {isScheduleOpen && (
@@ -864,8 +873,15 @@ export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoic
               <Plus className="h-5 w-5 lg:h-4 lg:w-4 transition-transform" />
             </button>
 
+            <AnimatePresence>
             {isMoreMenuOpen && (
-              <div className="absolute bottom-full right-0 mb-2 w-52 overflow-hidden rounded-2xl border border-zinc-200 bg-white p-1.5 shadow-2xl ring-1 ring-black/5 dark:border-zinc-700 dark:bg-zinc-900 animate-in fade-in slide-in-from-bottom-2 zoom-in-95 duration-200 z-50">
+              <motion.div
+                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                transition={{ duration: 0.15 }}
+                className="absolute bottom-full right-0 mb-2 w-52 overflow-hidden rounded-2xl border border-zinc-200 bg-white p-1.5 shadow-2xl ring-1 ring-black/5 dark:border-zinc-700 dark:bg-zinc-900 origin-bottom-right z-50"
+              >
                 <button
                   onClick={() => { setIsMoreMenuOpen(false); setIsStickerOpen(!isStickerOpen); }}
                   className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-zinc-700 hover:bg-sky-50 hover:text-sky-700 dark:text-zinc-200 dark:hover:bg-sky-900/20 dark:hover:text-sky-400 transition-colors"
@@ -918,8 +934,9 @@ export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoic
                     <span className="ml-auto text-[10px] font-bold text-amber-500">BẬT</span>
                   )}
                 </button>
-              </div>
+              </motion.div>
             )}
+            </AnimatePresence>
 
             {/* Sticker Picker (opened from + menu) */}
             <StickerPicker

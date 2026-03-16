@@ -9,6 +9,7 @@ import { t } from '@/lib/i18n';
 import { useMatrixStore } from '@/lib/store/matrix-store';
 import { useState, useRef, useEffect } from 'react';
 import { notificationService } from '@/lib/services/notification-service';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface MobileBottomBarProps {
     activeSection?: string;
@@ -122,15 +123,26 @@ export function MobileBottomBar({ activeSection, onSectionChange }: MobileBottom
     return (
         <>
             {/* More Sheet Overlay */}
-            {isMoreOpen && (
-                <div className="fixed inset-0 z-[200] flex flex-col justify-end lg:hidden">
-                    {/* Backdrop */}
-                    <div className="absolute inset-0 bg-black/50" onClick={() => setIsMoreOpen(false)} />
+            <AnimatePresence>
+                {isMoreOpen && (
+                    <div className="fixed inset-0 z-[200] flex flex-col justify-end lg:hidden">
+                        {/* Backdrop */}
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="absolute inset-0 bg-black/50" 
+                            onClick={() => setIsMoreOpen(false)} 
+                        />
 
-                    {/* Sheet */}
-                    <div
-                        ref={sheetRef}
-                        className="relative bg-white dark:bg-zinc-900 rounded-t-3xl shadow-2xl ring-1 ring-black/5 dark:ring-zinc-700 pb-24"
+                        {/* Sheet */}
+                        <motion.div
+                            initial={{ y: "100%" }}
+                            animate={{ y: 0 }}
+                            exit={{ y: "100%" }}
+                            transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                            ref={sheetRef}
+                            className="relative bg-white dark:bg-zinc-900 rounded-t-3xl shadow-2xl ring-1 ring-black/5 dark:ring-zinc-700 pb-24"
                         style={{
                             transform: sheetDragY > 0 ? `translateY(${sheetDragY}px)` : undefined,
                             transition: sheetDragY > 0 ? 'none' : 'transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)',
@@ -189,11 +201,12 @@ export function MobileBottomBar({ activeSection, onSectionChange }: MobileBottom
                                         </span>
                                     )}
                                 </button>
-                            ))}
-                        </div>
+                                ))}
+                            </div>
+                        </motion.div>
                     </div>
-                </div>
-            )}
+                )}
+            </AnimatePresence>
 
             {/* Bottom Navigation Bar */}
             <nav
@@ -215,16 +228,21 @@ export function MobileBottomBar({ activeSection, onSectionChange }: MobileBottom
                                 }
                             }}
                             className={cn(
-                                "flex-1 flex flex-col items-center gap-0.5 py-2 rounded-lg transition-all relative text-center min-w-0",
+                                "flex-1 flex flex-col items-center gap-0.5 py-2 rounded-lg transition-all relative text-center min-w-0 group",
                                 isActive ? "bg-white/20" : "hover:bg-white/10"
                             )}
                         >
-                            {tab.iconImg ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={tab.iconImg} alt={tab.label} className="h-6 w-6" />
-                            ) : (
-                                <Icon className="h-6 w-6" />
-                            )}
+                            <motion.div
+                                whileTap={{ scale: 0.8 }}
+                                transition={{ type: "spring", stiffness: 400, damping: 17 }}
+                            >
+                                {tab.iconImg ? (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img src={tab.iconImg} alt={tab.label} className="h-6 w-6" />
+                                ) : (
+                                    <Icon className="h-6 w-6" />
+                                )}
+                            </motion.div>
                             <span className="text-[11px] font-medium">{tab.label}</span>
                             {tab.badge && (
                                 <span className="absolute top-0.5 right-0.5 h-[18px] min-w-[18px] flex items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold">
@@ -239,11 +257,16 @@ export function MobileBottomBar({ activeSection, onSectionChange }: MobileBottom
                 <button
                     onClick={() => setIsMoreOpen(true)}
                     className={cn(
-                        "flex-1 flex flex-col items-center gap-0.5 py-2 rounded-lg transition-all text-center min-w-0 relative",
+                        "flex-1 flex flex-col items-center gap-0.5 py-2 rounded-lg transition-all text-center min-w-0 relative group",
                         (isSettings || isNotifications || isMoreOpen) ? "bg-white/20" : "hover:bg-white/10"
                     )}
                 >
-                    <MoreHorizontal className="h-6 w-6" />
+                    <motion.div
+                        whileTap={{ scale: 0.8 }}
+                        transition={{ type: "spring", stiffness: 400, damping: 17 }}
+                    >
+                        <MoreHorizontal className="h-6 w-6" />
+                    </motion.div>
                     <span className="text-[11px] font-medium">Thêm</span>
                     {notifUnread > 0 && (
                         <span className="absolute top-0.5 right-0.5 h-[18px] min-w-[18px] flex items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold">

@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Send, Paperclip, MoreVertical, Phone, Video, Search, UserPlus, Crown, ShieldCheck, Trash2, Users, GripVertical, Shield, MessageSquare, Plus, ArrowLeft, FolderOpen, X, Check, BellOff, Bell, LogOut, Ban, Pin, Copy, Download, Eraser, ImageIcon, Wallpaper, MapPin, BarChart3, Timer } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { MessageBubble } from '@/components/chat/message-bubble';
 import { ChatInput, type ReplyEditState } from '@/components/chat/chat-input';
 import { MediaGallery } from '@/components/chat/media-gallery';
@@ -1055,8 +1056,12 @@ export default function RoomPage() {
   }, [room?.type, room?.members, currentUser?.id]);
 
   return (
-    <div
-      className="flex h-[100dvh] lg:h-full min-h-0 flex-col relative"
+    <motion.div
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -20 }}
+      transition={{ duration: 0.3, type: 'spring', stiffness: 200, damping: 25 }}
+      className="flex h-[100dvh] lg:h-full min-h-0 flex-col relative bg-zinc-50 dark:bg-zinc-950"
       onDragEnter={(e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -2949,7 +2954,7 @@ export default function RoomPage() {
           </div>
         </div>
       )}
-    </div >
+    </motion.div>
   );
 }
 
