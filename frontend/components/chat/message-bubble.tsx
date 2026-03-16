@@ -435,6 +435,8 @@ function MessageBubbleInner({
   const msgRef = useRef<HTMLDivElement>(null);
   const touchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchMoved = useRef(false);
+  const sheetTouchStartY = useRef(0);
+  const [sheetDragY, setSheetDragY] = useState(0);
 
   const handleMouseEnter = () => {
     if (msgRef.current) {
@@ -524,8 +526,7 @@ function MessageBubbleInner({
 
   const handleReactionClick = (emoji: string, e: React.MouseEvent) => {
     onReaction(msg.id, emoji);
-    // Close menu after a brief delay to let the animation start
-    setTimeout(closeLongPress, 350);
+    // Do NOT close menu — user may want to tap multiple reactions
     // Get click origin from the button that was clicked
     const btnRect = e.currentTarget.getBoundingClientRect();
     const cx = btnRect.left + btnRect.width / 2;
@@ -808,10 +809,33 @@ function MessageBubbleInner({
           </div>
         </div>
 
-        {/* Bottom Sheet */}
-        <div className="relative bg-white dark:bg-zinc-900 rounded-t-3xl shadow-2xl ring-1 ring-black/5 dark:ring-zinc-700 animate-in slide-in-from-bottom-8 duration-300 max-h-[60vh] overflow-y-auto">
+        {/* Bottom Sheet with swipe-down-to-close */}
+        <div
+          className="relative bg-white dark:bg-zinc-900 rounded-t-3xl shadow-2xl ring-1 ring-black/5 dark:ring-zinc-700 max-h-[60vh] overflow-y-auto"
+          style={{
+            transform: sheetDragY > 0 ? `translateY(${sheetDragY}px)` : undefined,
+            transition: sheetDragY > 0 ? 'none' : 'transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)',
+            animation: sheetDragY > 0 ? 'none' : undefined,
+          }}
+          onTouchStart={(e) => {
+            sheetTouchStartY.current = e.touches[0].clientY;
+            setSheetDragY(0);
+          }}
+          onTouchMove={(e) => {
+            const dy = e.touches[0].clientY - sheetTouchStartY.current;
+            if (dy > 0) {
+              setSheetDragY(dy);
+            }
+          }}
+          onTouchEnd={() => {
+            if (sheetDragY > 80) {
+              closeLongPress();
+            }
+            setSheetDragY(0);
+          }}
+        >
           {/* Drag Handle */}
-          <div className="flex justify-center pt-3 pb-2">
+          <div className="flex justify-center pt-3 pb-2 cursor-grab">
             <div className="h-1 w-10 rounded-full bg-zinc-300 dark:bg-zinc-600" />
           </div>
 
