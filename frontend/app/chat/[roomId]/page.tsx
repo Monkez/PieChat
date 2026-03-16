@@ -1057,10 +1057,10 @@ export default function RoomPage() {
 
   return (
     <motion.div
-      initial={{ opacity: 0, x: 20 }}
+      initial={{ opacity: 0, x: 8 }}
       animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: -20 }}
-      transition={{ duration: 0.3, type: 'spring', stiffness: 200, damping: 25 }}
+      exit={{ opacity: 0, x: -8 }}
+      transition={{ duration: 0.15, type: 'spring', stiffness: 500, damping: 35 }}
       className="flex h-[100dvh] lg:h-full min-h-0 flex-col relative bg-zinc-50 dark:bg-zinc-950"
       onDragEnter={(e) => {
         e.preventDefault();

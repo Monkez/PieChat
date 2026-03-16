@@ -131,6 +131,7 @@ export function MobileBottomBar({ activeSection, onSectionChange }: MobileBottom
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
+                            transition={{ duration: 0.1 }}
                             className="absolute inset-0 bg-black/50" 
                             onClick={() => setIsMoreOpen(false)} 
                         />
@@ -140,7 +141,7 @@ export function MobileBottomBar({ activeSection, onSectionChange }: MobileBottom
                             initial={{ y: "100%" }}
                             animate={{ y: 0 }}
                             exit={{ y: "100%" }}
-                            transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                            transition={{ type: "spring", damping: 35, stiffness: 500 }}
                             ref={sheetRef}
                             className="relative bg-white dark:bg-zinc-900 rounded-t-3xl shadow-2xl ring-1 ring-black/5 dark:ring-zinc-700 pb-24"
                         style={{
@@ -234,7 +235,7 @@ export function MobileBottomBar({ activeSection, onSectionChange }: MobileBottom
                         >
                             <motion.div
                                 whileTap={{ scale: 0.8 }}
-                                transition={{ type: "spring", stiffness: 400, damping: 17 }}
+                                transition={{ type: "spring", stiffness: 600, damping: 20 }}
                             >
                                 {tab.iconImg ? (
                                     // eslint-disable-next-line @next/next/no-img-element
@@ -263,7 +264,7 @@ export function MobileBottomBar({ activeSection, onSectionChange }: MobileBottom
                 >
                     <motion.div
                         whileTap={{ scale: 0.8 }}
-                        transition={{ type: "spring", stiffness: 400, damping: 17 }}
+                        transition={{ type: "spring", stiffness: 600, damping: 20 }}
                     >
                         <MoreHorizontal className="h-6 w-6" />
                     </motion.div>

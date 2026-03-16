@@ -707,7 +707,7 @@ export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoic
               initial={{ opacity: 0, y: 10, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 10, scale: 0.95 }}
-              transition={{ duration: 0.15 }}
+              transition={{ duration: 0.08 }}
               className="absolute bottom-full left-0 mb-2 w-48 overflow-hidden rounded-2xl border border-zinc-200 bg-white p-1.5 shadow-2xl ring-1 ring-black/5 dark:border-zinc-700 dark:bg-zinc-900 origin-bottom-left"
             >
               <button
@@ -879,7 +879,7 @@ export function ChatInput({ onSendMessage, onSendFiles, onSendFolder, onSendVoic
                 initial={{ opacity: 0, y: 10, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                transition={{ duration: 0.15 }}
+                transition={{ duration: 0.08 }}
                 className="absolute bottom-full right-0 mb-2 w-52 overflow-hidden rounded-2xl border border-zinc-200 bg-white p-1.5 shadow-2xl ring-1 ring-black/5 dark:border-zinc-700 dark:bg-zinc-900 origin-bottom-right z-50"
               >
                 <button
