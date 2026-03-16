@@ -78,6 +78,14 @@ export default function SettingsPage() {
   return (
     <div className="flex h-screen bg-zinc-50 dark:bg-black overflow-y-auto">
       <div className="mx-auto w-full max-w-3xl px-4 py-8 lg:pb-8" style={{ paddingTop: 'max(2rem, env(safe-area-inset-top, 2rem))', paddingBottom: 'calc(8rem + env(safe-area-inset-bottom, 0px))' }}>
+        {/* PieChat Logo — mobile only */}
+        <div className="flex items-center gap-2 mb-4 lg:hidden">
+          <Link href="/chat">
+            <img src="/PieChatIcon.png" alt="PieChat" className="h-7 w-7" />
+          </Link>
+          <span className="text-sm font-bold text-zinc-800 dark:text-zinc-200">PieChat</span>
+        </div>
+
         <div className="mb-6 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <Link href="/chat" className="rounded-full p-2 text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800 transition-colors">

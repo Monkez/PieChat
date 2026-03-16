@@ -89,7 +89,7 @@ export function MobileBottomBar({ activeSection, onSectionChange }: MobileBottom
             label: 'Trang cá nhân',
             color: 'text-sky-500',
             bg: 'bg-sky-50 dark:bg-sky-900/20',
-            onClick: () => { router.push('/settings'); setIsMoreOpen(false); },
+            onClick: () => { router.push('/profile'); setIsMoreOpen(false); },
         },
         {
             icon: Bell,

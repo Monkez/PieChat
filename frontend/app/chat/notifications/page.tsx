@@ -65,8 +65,15 @@ export default function NotificationsPage() {
   return (
     <div className="flex h-full flex-col bg-white dark:bg-zinc-950">
       {/* Header */}
-      <div className="border-b border-zinc-100 dark:border-zinc-800 px-4 py-4 lg:px-6">
-        <div className="flex items-center justify-between">
+      <div className="border-b border-zinc-100 dark:border-zinc-800 px-4 lg:px-6" style={{ paddingTop: 'max(1rem, env(safe-area-inset-top))' }}>
+        {/* PieChat Logo */}
+        <div className="flex items-center gap-2 mb-3 lg:hidden">
+          <Link href="/chat">
+            <img src="/PieChatIcon.png" alt="PieChat" className="h-7 w-7" />
+          </Link>
+          <span className="text-sm font-bold text-zinc-800 dark:text-zinc-200">PieChat</span>
+        </div>
+        <div className="flex items-center justify-between pb-3">
           <div className="flex items-center gap-3">
             <Link href="/chat" className="lg:hidden rounded-full p-1.5 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800">
               <ArrowLeft className="h-5 w-5" />

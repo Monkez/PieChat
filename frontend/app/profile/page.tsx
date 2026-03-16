@@ -165,11 +165,15 @@ export default function ProfilePage() {
   return (
     <div className="flex h-screen bg-zinc-50 dark:bg-black overflow-y-auto">
       <div className="mx-auto w-full max-w-2xl pb-24 lg:pb-8">
-        {/* Back Button — floating */}
+        {/* Back Button + PieChat Logo — floating */}
         <div className="sticky top-0 z-30 flex items-center gap-3 px-4 py-3" style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}>
           <Link href="/chat" className="rounded-full p-2 bg-black/30 text-white hover:bg-black/50 backdrop-blur-sm transition-colors">
             <ArrowLeft className="h-5 w-5" />
           </Link>
+          <div className="flex items-center gap-2 lg:hidden">
+            <img src="/PieChatIcon.png" alt="PieChat" className="h-6 w-6" />
+            <span className="text-sm font-bold text-white drop-shadow-lg">PieChat</span>
+          </div>
         </div>
 
         {/* Cover Image */}
