@@ -994,7 +994,7 @@ function MessageBubbleInner({
     {renderMobileSheet()}
     <div
       className={cn(
-        "group flex w-full gap-2 lg:gap-3 transition-all hover:bg-zinc-50/50 dark:hover:bg-zinc-800/20 px-1 py-0.5 lg:px-2 lg:py-1",
+        "group flex w-full gap-2 lg:gap-3 transition-all lg:hover:bg-zinc-50/50 lg:dark:hover:bg-zinc-800/20 px-1 py-0.5 lg:px-2 lg:py-1",
         isMe ? "justify-end" : "justify-start",
         longPressActive && "bg-sky-50/80 dark:bg-sky-900/20"
       )}
@@ -1002,6 +1002,8 @@ function MessageBubbleInner({
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       onTouchMove={handleTouchMove}
+      onContextMenu={(e) => { e.preventDefault(); }}
+      style={{ WebkitTouchCallout: 'none', userSelect: 'none' }}
     >
       {!isMe && (
         <div className={cn("flex flex-col justify-end pb-1 cursor-pointer", isFirst ? "opacity-100" : "opacity-0")} onClick={() => onAvatarClick?.(msg.senderId)}>
@@ -1047,7 +1049,7 @@ function MessageBubbleInner({
         {/* Reaction Bar on Hover — hidden when menu is open */}
         {!msg.id.startsWith('temp-') && activeMenuId !== msg.id && (
           <div className={cn(
-            "absolute z-30 hidden group-hover/msg:flex justify-center min-w-[220px]",
+            "absolute z-30 hidden lg:group-hover/msg:flex justify-center min-w-[220px]",
             showAbove
               ? "bottom-full pb-2.5"
               : "top-full pt-2.5",
@@ -1082,7 +1084,7 @@ function MessageBubbleInner({
           "absolute top-1 items-center z-40 transition-all",
           activeMenuId === msg.id
             ? "flex opacity-100"
-            : "hidden group-hover/msg:flex opacity-0 group-hover/msg:opacity-100",
+            : "hidden lg:group-hover/msg:flex opacity-0 lg:group-hover/msg:opacity-100",
           isMe ? "right-full mr-3" : "left-full ml-3"
         )}>
           <div className={cn("absolute h-10 w-10", isMe ? "-right-5" : "-left-5")} />
