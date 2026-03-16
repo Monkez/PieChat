@@ -4,7 +4,6 @@ import { useState, useRef, useMemo, useCallback, memo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import Image from 'next/image';
 import { MoreVertical, Reply, Forward, Info, Trash2, Repeat, Download, Play, Pause, FileIcon, Copy, Pin, PinOff, Pencil, Phone, CreditCard, KeyRound, Link2, Code2, MapPin, Timer, Ban } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { Message } from '@/lib/services/matrix-service';
 import { cn } from '@/lib/utils';
 import { Avatar } from '@/components/ui/avatar';
@@ -1005,11 +1004,7 @@ function MessageBubbleInner({
   return (
     <>
     {renderMobileSheet()}
-    <motion.div
-      initial={{ opacity: 0, scale: 0.95, y: 10 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      transition={{ duration: 0.2, type: 'spring', stiffness: 200, damping: 20 }}
-      layout="position"
+    <div
       className={cn(
         "group flex w-full gap-2 lg:gap-3 transition-all px-1 py-px lg:px-2 lg:py-0.5",
         hasHover && "hover:bg-zinc-50/50 dark:hover:bg-zinc-800/20",
@@ -1478,7 +1473,7 @@ function MessageBubbleInner({
           ✓ Đã sao chép {copyToast}
         </div>
       )}
-    </motion.div>
+    </div>
     </>
   );
 }
