@@ -2084,8 +2084,10 @@ export default function RoomPage() {
 
                 const showDateSeparator = !prevMsg || new Date(msg.timestamp).toDateString() !== new Date(prevMsg.timestamp).toDateString();
 
+                const hasReactions = msg.reactions && Object.keys(msg.reactions).length > 0;
+
                 return (
-                  <div key={msg.id} id={`msg-${msg.id}`} data-msg-id={msg.id} className="flex flex-col w-full">
+                  <div key={msg.id} id={`msg-${msg.id}`} data-msg-id={msg.id} className={cn("flex flex-col w-full", hasReactions && "mb-7")}>
                     {showDateSeparator && (
                       <div className="my-6 flex items-center justify-center">
                         <span className="rounded-full bg-zinc-100/80 border border-zinc-200/50 px-4 py-1 text-[11px] font-medium text-zinc-500 shadow-sm backdrop-blur dark:bg-zinc-800/80 dark:border-zinc-700/50 dark:text-zinc-400">
